@@ -1,4 +1,5 @@
 #include "engine_fx.h"
+#include "config_loader.h"
 #include "audio_player.h"
 #include "gpio.h"
 #include <stdio.h>
@@ -18,7 +19,7 @@ void signal_handler(int sig) {
 void print_usage(const char *prog) {
     printf("Usage: %s [options]\n", prog);
     printf("Options:\n");
-    printf("  --pwm-pin <pin>              GPIO pin for PWM input (default: 17)\n");
+    printf("  --pwm-pin <pin>              GPIO pin for PWM input (default: 5)\n");
     printf("  --threshold <us>             PWM threshold in microseconds (default: 1500)\n");
     printf("  --channel <n>                Audio channel to use (default: 0)\n");
     printf("  --starting <file>            Starting sound file (optional)\n");
@@ -30,7 +31,7 @@ void print_usage(const char *prog) {
 }
 
 int main(int argc, char *argv[]) {
-    int pwm_pin = 17;
+    int pwm_pin = 5;
     int threshold = 1500;
     int audio_channel = 0;
     int starting_offset_ms = 0;
@@ -94,8 +95,17 @@ int main(int argc, char *argv[]) {
     printf("Stopping Offset: %d ms\n", stopping_offset_ms);
     printf("\n");
     
+    // Create engine config
+    EngineFXConfig engine_config = {
+        .enabled = true,
+        .pin = pwm_pin,
+        .threshold_us = threshold,
+        .starting_offset_ms = starting_offset_ms,
+        .stopping_offset_ms = stopping_offset_ms
+    };
+    
     // Create engine FX controller
-    EngineFX *engine = engine_fx_create(mixer, audio_channel, pwm_pin, threshold, starting_offset_ms, stopping_offset_ms);
+    EngineFX *engine = engine_fx_create(mixer, audio_channel, &engine_config);
     if (!engine) {
         fprintf(stderr, "Error: Failed to create engine FX controller\n");
         audio_mixer_destroy(mixer);

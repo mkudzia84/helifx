@@ -1,8 +1,10 @@
 #include "gun_fx.h"
+#include "config_loader.h"
 #include "gpio.h"
 #include "audio_player.h"
 #include "lights.h"
 #include "smoke_generator.h"
+#include "servo.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
@@ -22,6 +24,14 @@ struct GunFX {
     PWMMonitor *smoke_heater_toggle_monitor;
     int smoke_heater_toggle_pin;
     int smoke_heater_threshold;
+    
+    // Servo control
+    Servo *pitch_servo;
+    Servo *yaw_servo;
+    PWMMonitor *pitch_pwm_monitor;
+    PWMMonitor *yaw_pwm_monitor;
+    int pitch_pwm_pin;
+    int yaw_pwm_pin;
     
     // Components (optional)
     Led *nozzle_flash;
@@ -99,6 +109,8 @@ static void* gun_fx_processing_thread(void *arg) {
     GunFX *gun = (GunFX *)arg;
     PWMReading trigger_reading;
     PWMReading heater_reading;
+    PWMReading pitch_reading;
+    PWMReading yaw_reading;
     
     printf("[GUN] Processing thread started\n");
     
@@ -107,6 +119,17 @@ static void* gun_fx_processing_thread(void *arg) {
     clock_gettime(CLOCK_MONOTONIC, &last_status_time);
     
     while (gun->processing_running) {
+        // Update servos from PWM inputs
+        if (gun->pitch_servo && gun->pitch_pwm_monitor && 
+            pwm_monitor_get_reading(gun->pitch_pwm_monitor, &pitch_reading)) {
+            servo_set_input(gun->pitch_servo, pitch_reading.duration_us);
+        }
+        
+        if (gun->yaw_servo && gun->yaw_pwm_monitor && 
+            pwm_monitor_get_reading(gun->yaw_pwm_monitor, &yaw_reading)) {
+            servo_set_input(gun->yaw_servo, yaw_reading.duration_us);
+        }
+        
         // Get current rate index
         pthread_mutex_lock(&gun->mutex);
         int previous_rate_index = gun->current_rate_index;
@@ -259,11 +282,12 @@ static void* gun_fx_processing_thread(void *arg) {
 }
 
 GunFX* gun_fx_create(AudioMixer *mixer, int audio_channel,
-                     int trigger_pwm_pin,
-                     int smoke_heater_toggle_pin,
-                     int nozzle_flash_pin,
-                     int smoke_fan_pin,
-                     int smoke_heater_pin) {
+                     const GunFXConfig *config) {
+    if (!config) {
+        fprintf(stderr, "[GUN] Error: Config is NULL\n");
+        return NULL;
+    }
+    
     GunFX *gun = (GunFX *)calloc(1, sizeof(GunFX));
     if (!gun) {
         fprintf(stderr, "[GUN] Error: Cannot allocate memory for gun FX\n");
@@ -272,9 +296,10 @@ GunFX* gun_fx_create(AudioMixer *mixer, int audio_channel,
     
     gun->mixer = mixer;
     gun->audio_channel = audio_channel;
-    gun->trigger_pwm_pin = trigger_pwm_pin;
-    gun->smoke_heater_toggle_pin = smoke_heater_toggle_pin;
-    gun->smoke_heater_threshold = 1500; // Default threshold
+    gun->trigger_pwm_pin = config->trigger_pin;
+    gun->smoke_heater_toggle_pin = config->smoke_heater_toggle_pin;
+    gun->smoke_heater_threshold = config->smoke_heater_threshold_us;
+    gun->smoke_fan_off_delay_ms = config->smoke_fan_off_delay_ms;
     gun->rates = NULL;
     gun->rate_count = 0;
     gun->is_firing = false;
@@ -282,47 +307,95 @@ GunFX* gun_fx_create(AudioMixer *mixer, int audio_channel,
     gun->current_rate_index = -1;  // Not firing initially
     gun->smoke_heater_on = false;
     gun->processing_running = false;
+    gun->pitch_servo = NULL;
+    gun->yaw_servo = NULL;
+    gun->pitch_pwm_monitor = NULL;
+    gun->yaw_pwm_monitor = NULL;
     pthread_mutex_init(&gun->mutex, NULL);
     
     // Create nozzle flash LED if pin specified
-    if (nozzle_flash_pin >= 0) {
-        gun->nozzle_flash = led_create(nozzle_flash_pin);
+    if (config->nozzle_flash_pin >= 0) {
+        gun->nozzle_flash = led_create(config->nozzle_flash_pin);
         if (!gun->nozzle_flash) {
             fprintf(stderr, "[GUN] Warning: Failed to create nozzle flash LED\n");
         } else {
-            printf("[GUN] Nozzle flash LED on pin %d\n", nozzle_flash_pin);
+            printf("[GUN] Nozzle flash LED on pin %d\n", config->nozzle_flash_pin);
         }
     }
     
     // Create smoke generator if pins specified
-    if (smoke_fan_pin >= 0 && smoke_heater_pin >= 0) {
-        gun->smoke = smoke_generator_create(smoke_heater_pin, smoke_fan_pin);
+    if (config->smoke_fan_pin >= 0 && config->smoke_heater_pin >= 0) {
+        gun->smoke = smoke_generator_create(config->smoke_heater_pin, config->smoke_fan_pin);
         if (!gun->smoke) {
             fprintf(stderr, "[GUN] Warning: Failed to create smoke generator\n");
         } else {
-            printf("[GUN] Smoke generator (heater: pin %d, fan: pin %d)\n", smoke_heater_pin, smoke_fan_pin);
+            printf("[GUN] Smoke generator (heater: pin %d, fan: pin %d)\n", 
+                   config->smoke_heater_pin, config->smoke_fan_pin);
         }
     }
     
     // Create trigger PWM monitor if pin specified
-    if (trigger_pwm_pin >= 0) {
-        gun->trigger_pwm_monitor = pwm_monitor_create(trigger_pwm_pin, NULL, NULL);
+    if (config->trigger_pin >= 0) {
+        gun->trigger_pwm_monitor = pwm_monitor_create(config->trigger_pin, NULL, NULL);
         if (!gun->trigger_pwm_monitor) {
             fprintf(stderr, "[GUN] Warning: Failed to create trigger PWM monitor\n");
         } else {
             pwm_monitor_start(gun->trigger_pwm_monitor);
-            printf("[GUN] Trigger PWM monitoring on pin %d\n", trigger_pwm_pin);
+            printf("[GUN] Trigger PWM monitoring on pin %d\n", config->trigger_pin);
         }
     }
     
     // Create smoke heater toggle PWM monitor if pin specified
-    if (smoke_heater_toggle_pin >= 0) {
-        gun->smoke_heater_toggle_monitor = pwm_monitor_create(smoke_heater_toggle_pin, NULL, NULL);
+    if (config->smoke_heater_toggle_pin >= 0) {
+        gun->smoke_heater_toggle_monitor = pwm_monitor_create(config->smoke_heater_toggle_pin, NULL, NULL);
         if (!gun->smoke_heater_toggle_monitor) {
             fprintf(stderr, "[GUN] Warning: Failed to create smoke heater toggle monitor\n");
         } else {
             pwm_monitor_start(gun->smoke_heater_toggle_monitor);
-            printf("[GUN] Smoke heater toggle monitoring on pin %d\n", smoke_heater_toggle_pin);
+            printf("[GUN] Smoke heater toggle monitoring on pin %d\n", config->smoke_heater_toggle_pin);
+        }
+    }
+    
+    // Create pitch servo if enabled
+    if (config->pitch_servo.enabled) {
+        gun->pitch_servo = servo_create(&config->pitch_servo);
+        if (!gun->pitch_servo) {
+            fprintf(stderr, "[GUN] Warning: Failed to create pitch servo\n");
+        } else {
+            gun->pitch_pwm_monitor = pwm_monitor_create(config->pitch_servo.pwm_pin, NULL, NULL);
+            if (!gun->pitch_pwm_monitor) {
+                fprintf(stderr, "[GUN] Warning: Failed to create pitch PWM monitor\n");
+                servo_destroy(gun->pitch_servo);
+                gun->pitch_servo = NULL;
+            } else {
+                pwm_monitor_start(gun->pitch_pwm_monitor);
+                gun->pitch_pwm_pin = config->pitch_servo.pwm_pin;
+                printf("[GUN] Pitch servo (input pin: %d, output pin: %d)\n", 
+                       config->pitch_servo.pwm_pin, config->pitch_servo.output_pin);
+            }
+        }
+    }
+    
+    // Create yaw servo if enabled
+    if (config->yaw_servo.enabled) {
+        gun->yaw_servo = servo_create(&config->yaw_servo);
+    // Create yaw servo if enabled
+    if (config->yaw_servo.enabled) {
+        gun->yaw_servo = servo_create(&config->yaw_servo);
+        if (!gun->yaw_servo) {
+            fprintf(stderr, "[GUN] Warning: Failed to create yaw servo\n");
+        } else {
+            gun->yaw_pwm_monitor = pwm_monitor_create(config->yaw_servo.pwm_pin, NULL, NULL);
+            if (!gun->yaw_pwm_monitor) {
+                fprintf(stderr, "[GUN] Warning: Failed to create yaw PWM monitor\n");
+                servo_destroy(gun->yaw_servo);
+                gun->yaw_servo = NULL;
+            } else {
+                pwm_monitor_start(gun->yaw_pwm_monitor);
+                gun->yaw_pwm_pin = config->yaw_servo.pwm_pin;
+                printf("[GUN] Yaw servo (input pin: %d, output pin: %d)\n", 
+                       config->yaw_servo.pwm_pin, config->yaw_servo.output_pin);
+            }
         }
     }
     
@@ -369,10 +442,20 @@ void gun_fx_destroy(GunFX *gun) {
         pwm_monitor_stop(gun->smoke_heater_toggle_monitor);
         pwm_monitor_destroy(gun->smoke_heater_toggle_monitor);
     }
+    if (gun->pitch_pwm_monitor) {
+        pwm_monitor_stop(gun->pitch_pwm_monitor);
+        pwm_monitor_destroy(gun->pitch_pwm_monitor);
+    }
+    if (gun->yaw_pwm_monitor) {
+        pwm_monitor_stop(gun->yaw_pwm_monitor);
+        pwm_monitor_destroy(gun->yaw_pwm_monitor);
+    }
     
     // Destroy components
     if (gun->nozzle_flash) led_destroy(gun->nozzle_flash);
     if (gun->smoke) smoke_generator_destroy(gun->smoke);
+    if (gun->pitch_servo) servo_destroy(gun->pitch_servo);
+    if (gun->yaw_servo) servo_destroy(gun->yaw_servo);
     
     // Free rates array
     if (gun->rates) free(gun->rates);
@@ -429,6 +512,21 @@ bool gun_fx_is_firing(GunFX *gun) {
     pthread_mutex_unlock(&gun->mutex);
     
     return firing;
+}
+
+void gun_fx_set_smoke_fan_off_delay(GunFX *gun, int delay_ms) {
+    if (!gun) return;
+    gun->smoke_fan_off_delay_ms = delay_ms;
+}
+
+Servo* gun_fx_get_pitch_servo(GunFX *gun) {
+    if (!gun) return NULL;
+    return gun->pitch_servo;
+}
+
+Servo* gun_fx_get_yaw_servo(GunFX *gun) {
+    if (!gun) return NULL;
+    return gun->yaw_servo;
 }
 
 void gun_fx_set_smoke_fan_off_delay(GunFX *gun, int delay_ms) {

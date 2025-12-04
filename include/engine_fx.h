@@ -6,6 +6,7 @@
 // Forward declarations
 typedef struct AudioMixer AudioMixer;
 typedef struct Sound Sound;
+typedef struct EngineFXConfig EngineFXConfig;
 
 // Engine states
 typedef enum {
@@ -30,17 +31,11 @@ typedef void (*EngineStateCallback)(EngineState old_state, EngineState new_state
  * Create a new engine FX controller
  * @param mixer Audio mixer handle (can be NULL if no audio)
  * @param audio_channel Audio channel to use for engine sounds
- * @param engine_toggle_pwm_pin GPIO pin for PWM input monitoring (-1 to disable)
- * @param engine_toggle_pwm_threshold PWM threshold value to consider engine "on" (microseconds)
- * @param starting_offset_from_stopping_ms Offset in milliseconds to play starting track from when restarting from stopping state (0 for beginning)
- * @param stopping_offset_from_starting_ms Offset in milliseconds to play stopping track from when stopping from starting state (0 for beginning)
+ * @param config Engine FX configuration
  * @return Engine FX handle, or NULL on failure
  */
 EngineFX* engine_fx_create(AudioMixer *mixer, int audio_channel, 
-                           int engine_toggle_pwm_pin,
-                           int engine_toggle_pwm_threshold,
-                           int starting_offset_from_stopping_ms,
-                           int stopping_offset_from_starting_ms);
+                           const EngineFXConfig *config);
 
 /**
  * Destroy engine FX controller

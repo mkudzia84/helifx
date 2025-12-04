@@ -1,6 +1,7 @@
 #include "engine_fx.h"
 #include "gpio.h"
 #include "audio_player.h"
+#include "config_loader.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
@@ -223,10 +224,12 @@ static void* engine_fx_processing_thread(void *arg) {
 }
 
 EngineFX* engine_fx_create(AudioMixer *mixer, int audio_channel, 
-                           int engine_toggle_pwm_pin,
-                           int engine_toggle_pwm_threshold,
-                           int starting_offset_from_stopping_ms,
-                           int stopping_offset_from_starting_ms) {
+                           const EngineFXConfig *config) {
+    if (!config) {
+        fprintf(stderr, "[ENGINE] Error: Config is NULL\n");
+        return NULL;
+    }
+    
     EngineFX *engine = (EngineFX *)calloc(1, sizeof(EngineFX));
     if (!engine) {
         fprintf(stderr, "[ENGINE] Error: Cannot allocate memory for engine\n");
@@ -236,10 +239,10 @@ EngineFX* engine_fx_create(AudioMixer *mixer, int audio_channel,
     engine->state = ENGINE_STOPPED;
     engine->mixer = mixer;
     engine->audio_channel = audio_channel;
-    engine->engine_toggle_pwm_pin = engine_toggle_pwm_pin;
-    engine->engine_toggle_pwm_threshold = engine_toggle_pwm_threshold;
-    engine->starting_offset_from_stopping_ms = starting_offset_from_stopping_ms;
-    engine->stopping_offset_from_starting_ms = stopping_offset_from_starting_ms;
+    engine->engine_toggle_pwm_pin = config->pin;
+    engine->engine_toggle_pwm_threshold = config->threshold_us;
+    engine->starting_offset_from_stopping_ms = config->starting_offset_ms;
+    engine->stopping_offset_from_starting_ms = config->stopping_offset_ms;
     engine->track_starting = NULL;
     engine->track_running = NULL;
     engine->track_stopping = NULL;
@@ -248,14 +251,14 @@ EngineFX* engine_fx_create(AudioMixer *mixer, int audio_channel,
     pthread_mutex_init(&engine->mutex, NULL);
     
     // Create PWM monitor if pin specified
-    if (engine_toggle_pwm_pin >= 0) {
-        engine->engine_toggle_pwm_monitor = pwm_monitor_create(engine_toggle_pwm_pin, NULL, NULL);
+    if (config->pin >= 0) {
+        engine->engine_toggle_pwm_monitor = pwm_monitor_create(config->pin, NULL, NULL);
         if (!engine->engine_toggle_pwm_monitor) {
-            fprintf(stderr, "[ENGINE] Warning: Failed to create PWM monitor for pin %d\n", engine_toggle_pwm_pin);
+            fprintf(stderr, "[ENGINE] Warning: Failed to create PWM monitor for pin %d\n", config->pin);
         } else {
             pwm_monitor_start(engine->engine_toggle_pwm_monitor);
             printf("[ENGINE] PWM monitoring started on pin %d (threshold: %d us)\n",
-                   engine_toggle_pwm_pin, engine_toggle_pwm_threshold);
+                   config->pin, config->threshold_us);
         }
     }
     

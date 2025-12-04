@@ -98,8 +98,7 @@ int main(int argc, char *argv[]) {
         }
         
         // Create engine FX controller (audio channel 0)
-        engine = engine_fx_create(mixer, 0, config.engine.pin, config.engine.threshold_us,
-                                 config.engine.starting_offset_ms, config.engine.stopping_offset_ms);
+        engine = engine_fx_create(mixer, 0, &config.engine);
         if (!engine) {
             fprintf(stderr, "[HELIFX] Error: Failed to create engine FX controller\n");
         } else {
@@ -140,12 +139,7 @@ int main(int argc, char *argv[]) {
         }
         
         // Create gun FX controller (audio channel 1)
-        gun = gun_fx_create(mixer, 1,
-                           config.gun.trigger_pin,
-                           config.gun.smoke_enabled ? config.gun.smoke_heater_toggle_pin : -1,
-                           config.gun.nozzle_flash_enabled ? config.gun.nozzle_flash_pin : -1,
-                           config.gun.smoke_enabled ? config.gun.smoke_fan_pin : -1,
-                           config.gun.smoke_enabled ? config.gun.smoke_heater_pin : -1);
+        gun = gun_fx_create(mixer, 1, &config.gun);
         
         if (!gun) {
             fprintf(stderr, "[HELIFX] Error: Failed to create gun FX controller\n");

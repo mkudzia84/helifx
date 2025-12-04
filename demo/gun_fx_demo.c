@@ -8,11 +8,11 @@
  *   gun_fx_demo [options]
  * 
  * Options:
- *   --trigger-pin=N         GPIO pin for trigger PWM input (default: 27)
- *   --heater-toggle-pin=N   GPIO pin for heater toggle PWM (default: 22)
- *   --led-pin=N             GPIO pin for nozzle flash LED (default: 23)
- *   --smoke-fan-pin=N       GPIO pin for smoke fan (default: 24)
- *   --smoke-heater-pin=N    GPIO pin for smoke heater (default: 25)
+ *   --trigger-pin=N         GPIO pin for trigger PWM input (default: 6)
+ *   --heater-toggle-pin=N   GPIO pin for heater toggle PWM (default: 12)
+ *   --led-pin=N             GPIO pin for nozzle flash LED (default: 22)
+ *   --smoke-fan-pin=N       GPIO pin for smoke fan (default: 23)
+ *   --smoke-heater-pin=N    GPIO pin for smoke heater (default: 24)
  *   --smoke-fan-off-delay=N Smoke fan off delay in ms (default: 2000)
  *   --audio-channel=N       Audio mixer channel (default: 0)
  *   --rate1-rpm=N           Rate 1 rounds per minute (default: 600)
@@ -36,6 +36,7 @@
  */
 
 #include "gun_fx.h"
+#include "config_loader.h"
 #include "audio_player.h"
 #include "gpio.h"
 #include <stdio.h>
@@ -72,11 +73,11 @@ void signal_handler(int signum) {
 
 // Load default configuration
 void load_default_config(Config *config) {
-    config->trigger_pin = 27;
-    config->heater_toggle_pin = 22;
-    config->led_pin = 23;
-    config->smoke_fan_pin = 24;
-    config->smoke_heater_pin = 25;
+    config->trigger_pin = 6;
+    config->heater_toggle_pin = 12;
+    config->led_pin = 22;
+    config->smoke_fan_pin = 23;
+    config->smoke_heater_pin = 24;
     config->audio_channel = 0;
     config->smoke_fan_off_delay_ms = 2000;  // 2 seconds default
     
@@ -96,11 +97,11 @@ void load_default_config(Config *config) {
 void print_help(const char *progname) {
     printf("Usage: %s [options]\n\n", progname);
     printf("Options:\n");
-    printf("  --trigger-pin=N         GPIO pin for trigger PWM input (default: 27)\n");
-    printf("  --heater-toggle-pin=N   GPIO pin for heater toggle PWM (default: 22)\n");
-    printf("  --led-pin=N             GPIO pin for nozzle flash LED (default: 23)\n");
-    printf("  --smoke-fan-pin=N       GPIO pin for smoke fan (default: 24)\n");
-    printf("  --smoke-heater-pin=N    GPIO pin for smoke heater (default: 25)\n");
+    printf("  --trigger-pin=N         GPIO pin for trigger PWM input (default: 6)\n");
+    printf("  --heater-toggle-pin=N   GPIO pin for heater toggle PWM (default: 12)\n");
+    printf("  --led-pin=N             GPIO pin for nozzle flash LED (default: 22)\n");
+    printf("  --smoke-fan-pin=N       GPIO pin for smoke fan (default: 23)\n");
+    printf("  --smoke-heater-pin=N    GPIO pin for smoke heater (default: 24)\n");
     printf("  --smoke-fan-off-delay=N Smoke fan off delay in ms (default: 2000)\n");
     printf("  --audio-channel=N       Audio mixer channel (default: 0)\n");
     printf("  --rate1-rpm=N           Rate 1 rounds per minute (default: 600)\n");
@@ -319,13 +320,24 @@ int main(int argc, char *argv[]) {
         }
     }
     
+    // Create gun config
+    GunFXConfig gun_config = {
+        .enabled = true,
+        .trigger_pin = config.trigger_pin,
+        .smoke_enabled = true,
+        .smoke_heater_toggle_pin = config.heater_toggle_pin,
+        .smoke_heater_threshold_us = 1500,
+        .smoke_heater_pin = config.smoke_heater_pin,
+        .smoke_fan_pin = config.smoke_fan_pin,
+        .smoke_fan_off_delay_ms = config.smoke_fan_off_delay_ms,
+        .nozzle_flash_enabled = true,
+        .nozzle_flash_pin = config.led_pin,
+        .pitch_servo = {.enabled = false},
+        .yaw_servo = {.enabled = false}
+    };
+    
     // Create gun FX controller
-    GunFX *gun = gun_fx_create(mixer, config.audio_channel, 
-                                config.trigger_pin, 
-                                config.heater_toggle_pin,
-                                config.led_pin, 
-                                config.smoke_fan_pin, 
-                                config.smoke_heater_pin);
+    GunFX *gun = gun_fx_create(mixer, config.audio_channel, &gun_config);
     if (!gun) {
         fprintf(stderr, "[DEMO] Failed to create gun FX\n");
         audio_mixer_destroy(mixer);

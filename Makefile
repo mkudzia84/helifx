@@ -14,7 +14,8 @@ SCRIPTS_DIR = scripts
 # Output binaries
 HELIFX = $(BUILD_DIR)/helifx
 DEMO_TARGETS = $(BUILD_DIR)/mixer_demo $(BUILD_DIR)/gpio_demo \
-               $(BUILD_DIR)/engine_fx_demo $(BUILD_DIR)/gun_fx_demo
+               $(BUILD_DIR)/engine_fx_demo $(BUILD_DIR)/gun_fx_demo \
+               $(BUILD_DIR)/servo_demo
 
 # All targets
 TARGETS = $(HELIFX) $(DEMO_TARGETS)
@@ -23,7 +24,7 @@ TARGETS = $(HELIFX) $(DEMO_TARGETS)
 HELIFX_SRCS = $(SRC_DIR)/main.c $(SRC_DIR)/config_loader.c \
               $(SRC_DIR)/engine_fx.c $(SRC_DIR)/gun_fx.c \
               $(SRC_DIR)/lights.c $(SRC_DIR)/smoke_generator.c \
-              $(SRC_DIR)/audio_player.c $(SRC_DIR)/gpio.c
+              $(SRC_DIR)/audio_player.c $(SRC_DIR)/gpio.c $(SRC_DIR)/servo.c
 
 MIXER_DEMO_SRCS = $(DEMO_DIR)/mixer_demo.c $(SRC_DIR)/audio_player.c $(SRC_DIR)/gpio.c
 GPIO_DEMO_SRCS = $(DEMO_DIR)/gpio_demo.c $(SRC_DIR)/gpio.c
@@ -31,7 +32,8 @@ ENGINE_FX_DEMO_SRCS = $(DEMO_DIR)/engine_fx_demo.c $(SRC_DIR)/engine_fx.c \
                       $(SRC_DIR)/audio_player.c $(SRC_DIR)/gpio.c
 GUN_FX_DEMO_SRCS = $(DEMO_DIR)/gun_fx_demo.c $(SRC_DIR)/gun_fx.c \
                    $(SRC_DIR)/lights.c $(SRC_DIR)/smoke_generator.c \
-                   $(SRC_DIR)/audio_player.c $(SRC_DIR)/gpio.c
+                   $(SRC_DIR)/audio_player.c $(SRC_DIR)/gpio.c $(SRC_DIR)/servo.c
+SERVO_DEMO_SRCS = $(DEMO_DIR)/servo_demo.c $(SRC_DIR)/servo.c
 
 # Object files
 HELIFX_OBJS = $(HELIFX_SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o)
@@ -41,7 +43,8 @@ ENGINE_FX_DEMO_OBJS = $(BUILD_DIR)/demo/engine_fx_demo.o $(BUILD_DIR)/engine_fx.
                       $(BUILD_DIR)/audio_player.o $(BUILD_DIR)/gpio.o
 GUN_FX_DEMO_OBJS = $(BUILD_DIR)/demo/gun_fx_demo.o $(BUILD_DIR)/gun_fx.o \
                    $(BUILD_DIR)/lights.o $(BUILD_DIR)/smoke_generator.o \
-                   $(BUILD_DIR)/audio_player.o $(BUILD_DIR)/gpio.o
+                   $(BUILD_DIR)/audio_player.o $(BUILD_DIR)/gpio.o $(BUILD_DIR)/servo.o
+SERVO_DEMO_OBJS = $(BUILD_DIR)/demo/servo_demo.o $(BUILD_DIR)/servo.o
 
 # Default target
 .PHONY: all
@@ -71,6 +74,9 @@ $(BUILD_DIR)/engine_fx_demo: $(BUILD_DIR) $(ENGINE_FX_DEMO_OBJS)
 
 $(BUILD_DIR)/gun_fx_demo: $(BUILD_DIR) $(GUN_FX_DEMO_OBJS)
 	$(CC) $(CFLAGS) -o $@ $(GUN_FX_DEMO_OBJS) $(LIBS)
+
+$(BUILD_DIR)/servo_demo: $(BUILD_DIR) $(SERVO_DEMO_OBJS)
+	$(CC) $(CFLAGS) -o $@ $(SERVO_DEMO_OBJS) $(LIBS)
 
 # Compile source files
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
@@ -103,6 +109,8 @@ $(BUILD_DIR)/gpio.o: $(INCLUDE_DIR)/gpio.h
 $(BUILD_DIR)/lights.o: $(INCLUDE_DIR)/lights.h $(INCLUDE_DIR)/gpio.h
 
 $(BUILD_DIR)/smoke_generator.o: $(INCLUDE_DIR)/smoke_generator.h $(INCLUDE_DIR)/gpio.h
+
+$(BUILD_DIR)/servo.o: $(INCLUDE_DIR)/servo.h
 
 # Clean build artifacts
 .PHONY: clean

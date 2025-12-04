@@ -8,6 +8,8 @@ typedef struct AudioMixer AudioMixer;
 typedef struct Sound Sound;
 typedef struct Led Led;
 typedef struct SmokeGenerator SmokeGenerator;
+typedef struct Servo Servo;
+typedef struct GunFXConfig GunFXConfig;
 
 // Gun FX controller
 typedef struct GunFX GunFX;
@@ -23,19 +25,11 @@ typedef struct {
  * Create a new gun FX controller
  * @param mixer Audio mixer handle (can be NULL if no audio)
  * @param audio_channel Audio channel to use for gun sounds
- * @param trigger_pwm_pin GPIO pin for PWM trigger input
- * @param smoke_heater_toggle_pin GPIO pin for smoke heater on/off toggle input (-1 to disable)
- * @param nozzle_flash_pin GPIO pin for nozzle flash LED output (-1 to disable)
- * @param smoke_fan_pin GPIO pin for smoke fan output (-1 to disable)
- * @param smoke_heater_pin GPIO pin for smoke heater output (-1 to disable)
+ * @param config Gun FX configuration
  * @return GunFX handle, or NULL on failure
  */
 GunFX* gun_fx_create(AudioMixer *mixer, int audio_channel,
-                     int trigger_pwm_pin,
-                     int smoke_heater_toggle_pin,
-                     int nozzle_flash_pin,
-                     int smoke_fan_pin,
-                     int smoke_heater_pin);
+                     const GunFXConfig *config);
 
 /**
  * Destroy gun FX controller
@@ -72,5 +66,19 @@ bool gun_fx_is_firing(GunFX *gun);
  * @param delay_ms Delay in milliseconds before turning smoke fan off after firing stops (0 = immediate)
  */
 void gun_fx_set_smoke_fan_off_delay(GunFX *gun, int delay_ms);
+
+/**
+ * Get pitch servo handle
+ * @param gun GunFX handle
+ * @return Servo handle or NULL if disabled
+ */
+Servo* gun_fx_get_pitch_servo(GunFX *gun);
+
+/**
+ * Get yaw servo handle
+ * @param gun GunFX handle
+ * @return Servo handle or NULL if disabled
+ */
+Servo* gun_fx_get_yaw_servo(GunFX *gun);
 
 #endif // GUN_FX_H

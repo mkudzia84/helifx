@@ -56,6 +56,30 @@ int config_load(const char *config_file, HeliFXConfig *config) {
     config->gun.smoke_heater_pwm_threshold_us = 1500;
     config->gun.smoke_fan_off_delay_ms = 2000;
     
+    // Pitch servo defaults
+    config->gun.pitch_servo.enabled = false;
+    config->gun.pitch_servo.pwm_pin = 5;
+    config->gun.pitch_servo.output_pin = 6;
+    config->gun.pitch_servo.input_min_us = 1000;
+    config->gun.pitch_servo.input_max_us = 2000;
+    config->gun.pitch_servo.output_min_us = 1000;
+    config->gun.pitch_servo.output_max_us = 2000;
+    config->gun.pitch_servo.max_speed_us_per_sec = 500.0f;
+    config->gun.pitch_servo.max_accel_us_per_sec2 = 2000.0f;
+    config->gun.pitch_servo.update_rate_hz = 50;
+    
+    // Yaw servo defaults
+    config->gun.yaw_servo.enabled = false;
+    config->gun.yaw_servo.pwm_pin = 13;
+    config->gun.yaw_servo.output_pin = 19;
+    config->gun.yaw_servo.input_min_us = 1000;
+    config->gun.yaw_servo.input_max_us = 2000;
+    config->gun.yaw_servo.output_min_us = 1000;
+    config->gun.yaw_servo.output_max_us = 2000;
+    config->gun.yaw_servo.max_speed_us_per_sec = 500.0f;
+    config->gun.yaw_servo.max_accel_us_per_sec2 = 2000.0f;
+    config->gun.yaw_servo.update_rate_hz = 50;
+    
     char current_section[64] = "";
     char current_key[64] = "";
     char current_subsection[64] = "";
@@ -234,9 +258,78 @@ int config_load(const char *config_file, HeliFXConfig *config) {
                                 yaml_event_delete(&event);
                                 continue;
                             }
+                        } else if (strcmp(current_subsection, "turret_control") == 0) {
+                            if (strcmp(value, "pitch") == 0 || strcmp(value, "yaw") == 0) {
+                                strncpy(current_key, value, sizeof(current_key) - 1);
+                                yaml_event_delete(&event);
+                                continue;
+                            }
                         }
                     }
                 } else if (depth == 4) {
+                    // Turret control servo parameters
+                    if (strcmp(current_section, "gun_fx") == 0 && strcmp(current_subsection, "turret_control") == 0) {
+                        ServoConfig *servo_cfg = NULL;
+                        if (strcmp(current_key, "pitch") == 0) {
+                            servo_cfg = &config->gun.pitch_servo;
+                        } else if (strcmp(current_key, "yaw") == 0) {
+                            servo_cfg = &config->gun.yaw_servo;
+                        }
+                        
+                        if (servo_cfg) {
+                            if (strcmp(value, "enabled") == 0) {
+                                yaml_parser_parse(&parser, &event);
+                                servo_cfg->enabled = strcmp((char *)event.data.scalar.value, "true") == 0;
+                                yaml_event_delete(&event);
+                                continue;
+                            } else if (strcmp(value, "pwm_pin") == 0) {
+                                yaml_parser_parse(&parser, &event);
+                                servo_cfg->pwm_pin = atoi((char *)event.data.scalar.value);
+                                yaml_event_delete(&event);
+                                continue;
+                            } else if (strcmp(value, "output_pin") == 0) {
+                                yaml_parser_parse(&parser, &event);
+                                servo_cfg->output_pin = atoi((char *)event.data.scalar.value);
+                                yaml_event_delete(&event);
+                                continue;
+                            } else if (strcmp(value, "input_min_us") == 0) {
+                                yaml_parser_parse(&parser, &event);
+                                servo_cfg->input_min_us = atoi((char *)event.data.scalar.value);
+                                yaml_event_delete(&event);
+                                continue;
+                            } else if (strcmp(value, "input_max_us") == 0) {
+                                yaml_parser_parse(&parser, &event);
+                                servo_cfg->input_max_us = atoi((char *)event.data.scalar.value);
+                                yaml_event_delete(&event);
+                                continue;
+                            } else if (strcmp(value, "output_min_us") == 0) {
+                                yaml_parser_parse(&parser, &event);
+                                servo_cfg->output_min_us = atoi((char *)event.data.scalar.value);
+                                yaml_event_delete(&event);
+                                continue;
+                            } else if (strcmp(value, "output_max_us") == 0) {
+                                yaml_parser_parse(&parser, &event);
+                                servo_cfg->output_max_us = atoi((char *)event.data.scalar.value);
+                                yaml_event_delete(&event);
+                                continue;
+                            } else if (strcmp(value, "max_speed_us_per_sec") == 0) {
+                                yaml_parser_parse(&parser, &event);
+                                servo_cfg->max_speed_us_per_sec = atof((char *)event.data.scalar.value);
+                                yaml_event_delete(&event);
+                                continue;
+                            } else if (strcmp(value, "max_accel_us_per_sec2") == 0) {
+                                yaml_parser_parse(&parser, &event);
+                                servo_cfg->max_accel_us_per_sec2 = atof((char *)event.data.scalar.value);
+                                yaml_event_delete(&event);
+                                continue;
+                            } else if (strcmp(value, "update_rate_hz") == 0) {
+                                yaml_parser_parse(&parser, &event);
+                                servo_cfg->update_rate_hz = atoi((char *)event.data.scalar.value);
+                                yaml_event_delete(&event);
+                                continue;
+                            }
+                        }
+                    }
                     // Nested values (sounds)
                     if (strcmp(current_section, "engine_fx") == 0 && strcmp(current_subsection, "sounds") == 0) {
                         if (strcmp(current_key, "starting") == 0 && strcmp(value, "file") == 0) {
@@ -393,6 +486,27 @@ void config_print(const HeliFXConfig *config) {
                    config->gun.rates[i].rpm,
                    config->gun.rates[i].pwm_threshold_us,
                    config->gun.rates[i].sound_file);
+        }
+        printf("  Turret Control:\n");
+        printf("    Pitch servo: %s\n", config->gun.pitch_servo.enabled ? "ENABLED" : "DISABLED");
+        if (config->gun.pitch_servo.enabled) {
+            printf("      PWM pin: %d, Output pin: %d\n", config->gun.pitch_servo.pwm_pin, config->gun.pitch_servo.output_pin);
+            printf("      Input: %d-%d us, Output: %d-%d us\n", 
+                   config->gun.pitch_servo.input_min_us, config->gun.pitch_servo.input_max_us,
+                   config->gun.pitch_servo.output_min_us, config->gun.pitch_servo.output_max_us);
+            printf("      Speed: %.0f us/s, Accel: %.0f us/s², Rate: %d Hz\n",
+                   config->gun.pitch_servo.max_speed_us_per_sec, config->gun.pitch_servo.max_accel_us_per_sec2,
+                   config->gun.pitch_servo.update_rate_hz);
+        }
+        printf("    Yaw servo: %s\n", config->gun.yaw_servo.enabled ? "ENABLED" : "DISABLED");
+        if (config->gun.yaw_servo.enabled) {
+            printf("      PWM pin: %d, Output pin: %d\n", config->gun.yaw_servo.pwm_pin, config->gun.yaw_servo.output_pin);
+            printf("      Input: %d-%d us, Output: %d-%d us\n", 
+                   config->gun.yaw_servo.input_min_us, config->gun.yaw_servo.input_max_us,
+                   config->gun.yaw_servo.output_min_us, config->gun.yaw_servo.output_max_us);
+            printf("      Speed: %.0f us/s, Accel: %.0f us/s², Rate: %d Hz\n",
+                   config->gun.yaw_servo.max_speed_us_per_sec, config->gun.yaw_servo.max_accel_us_per_sec2,
+                   config->gun.yaw_servo.update_rate_hz);
         }
     } else {
         printf("Gun FX: DISABLED\n");

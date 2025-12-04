@@ -11,6 +11,20 @@ typedef struct {
     char sound_file[512];
 } RateOfFireConfig;
 
+// Servo configuration
+typedef struct {
+    bool enabled;
+    int pwm_pin;
+    int output_pin;
+    int input_min_us;
+    int input_max_us;
+    int output_min_us;
+    int output_max_us;
+    float max_speed_us_per_sec;
+    float max_accel_us_per_sec2;
+    int update_rate_hz;
+} ServoConfig;
+
 // Engine FX configuration
 typedef struct {
     bool enabled;
@@ -37,6 +51,9 @@ typedef struct {
     int smoke_heater_toggle_pin;
     int smoke_heater_pwm_threshold_us;
     int smoke_fan_off_delay_ms;
+    
+    ServoConfig pitch_servo;
+    ServoConfig yaw_servo;
     
     RateOfFireConfig *rates;
     int rate_count;
