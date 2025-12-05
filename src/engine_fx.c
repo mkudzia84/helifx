@@ -2,6 +2,7 @@
 #include "gpio.h"
 #include "audio_player.h"
 #include "config_loader.h"
+#include "logging.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
@@ -51,7 +52,7 @@ static void* engine_fx_processing_thread(void *arg) {
     int consecutive_on_count = 0;
     int consecutive_off_count = 0;
     
-    printf("[ENGINE] Processing thread started\n");
+    LOG_INFO(LOG_ENGINE, "Processing thread started");
     
     while (engine->processing_running) {
         // Get PWM reading - maintain previous state if reading fails
@@ -115,6 +116,7 @@ static void* engine_fx_processing_thread(void *arg) {
             
             if (engine->mixer && engine->track_starting) {
                 engine->state = ENGINE_STARTING;
+                LOG_STATE(LOG_ENGINE, "STOPPED", "STARTING");
                 printf("[ENGINE] Transitioning to STARTING\n");
                 
                 PlaybackOptions opts = {.loop = false, .volume = 1.0f};
@@ -211,6 +213,7 @@ static void* engine_fx_processing_thread(void *arg) {
             !audio_mixer_is_channel_playing(engine->mixer, engine->audio_channel)) {
             pthread_mutex_lock(&engine->mutex);
             engine->state = ENGINE_STOPPED;
+            LOG_STATE(LOG_ENGINE, "RUNNING", "STOPPED");
             printf("[ENGINE] Transitioning to STOPPED\n");
             pthread_mutex_unlock(&engine->mutex);
             continue;
@@ -219,14 +222,14 @@ static void* engine_fx_processing_thread(void *arg) {
         usleep(10000); // 10ms loop delay for smooth audio transitions
     }
     
-    printf("[ENGINE] Processing thread stopped\n");
+    LOG_INFO(LOG_ENGINE, "Processing thread stopped");
     return NULL;
 }
 
 EngineFX* engine_fx_create(AudioMixer *mixer, int audio_channel, 
                            const EngineFXConfig *config) {
     if (!config) {
-        fprintf(stderr, "[ENGINE] Error: Config is NULL\n");
+        LOG_ERROR(LOG_ENGINE, "Config is NULL");
         return NULL;
     }
     

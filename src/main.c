@@ -12,6 +12,7 @@
 #include "audio_player.h"
 #include "gpio.h"
 #include "config_loader.h"
+#include "logging.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <signal.h>

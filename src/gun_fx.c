@@ -5,6 +5,7 @@
 #include "lights.h"
 #include "smoke_generator.h"
 #include "servo.h"
+#include "logging.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
@@ -112,7 +113,7 @@ static void* gun_fx_processing_thread(void *arg) {
     PWMReading pitch_reading;
     PWMReading yaw_reading;
     
-    printf("[GUN] Processing thread started\n");
+    LOG_INFO(LOG_GUN, "Processing thread started");
     
     // For periodic status output
     struct timespec last_status_time;
@@ -139,15 +140,19 @@ static void* gun_fx_processing_thread(void *arg) {
         int new_rate_index;
         if (gun->trigger_pwm_monitor && pwm_monitor_get_reading(gun->trigger_pwm_monitor, &trigger_reading)) {
             new_rate_index = select_rate_of_fire(gun, trigger_reading.duration_us, previous_rate_index);
+            LOG_DEBUG(LOG_GUN, "Trigger PWM reading: %d µs, selected rate index: %d", trigger_reading.duration_us, new_rate_index);
             
             // Log rate changes
             if (new_rate_index != previous_rate_index) {
                 if (new_rate_index >= 0) {
-                    printf("[GUN] Rate changed: Rate %d (%d RPM)\n",
+                    LOG_STATE(LOG_GUN, "IDLE", "RATE_SELECTED");
+                    LOG_INFO(LOG_GUN, "Rate selected: %d (%d RPM) @ %d µs",
                            new_rate_index + 1,
-                           gun->rates[new_rate_index].rounds_per_minute);
+                           gun->rates[new_rate_index].rounds_per_minute,
+                           trigger_reading.duration_us);
                 } else {
-                    printf("[GUN] Trigger OFF\n");
+                    LOG_STATE(LOG_GUN, "FIRING", "IDLE");
+                    LOG_DEBUG(LOG_GUN, "Trigger OFF (PWM: %d µs)", trigger_reading.duration_us);
                 }
             }
         } else {
@@ -158,17 +163,19 @@ static void* gun_fx_processing_thread(void *arg) {
         // Handle smoke heater toggle
         if (gun->smoke_heater_toggle_monitor && pwm_monitor_get_reading(gun->smoke_heater_toggle_monitor, &heater_reading)) {
             bool heater_toggle_on = (heater_reading.duration_us >= gun->smoke_heater_threshold);
+            LOG_DEBUG(LOG_GUN, "Heater toggle PWM: %d µs (threshold: %d µs) -> %s",
+                     heater_reading.duration_us, gun->smoke_heater_threshold, heater_toggle_on ? "ON" : "OFF");
             
             pthread_mutex_lock(&gun->mutex);
             if (heater_toggle_on && !gun->smoke_heater_on) {
                 gun->smoke_heater_on = true;
-                printf("[GUN] Smoke heater ON\n");
+                LOG_INFO(LOG_GUN, "Smoke heater ON (PWM: %d µs)", heater_reading.duration_us);
                 if (gun->smoke) {
                     smoke_generator_heater_on(gun->smoke);
                 }
             } else if (!heater_toggle_on && gun->smoke_heater_on) {
                 gun->smoke_heater_on = false;
-                printf("[GUN] Smoke heater OFF\n");
+                LOG_INFO(LOG_GUN, "Smoke heater OFF (PWM: %d µs)", heater_reading.duration_us);
                 if (gun->smoke) {
                     smoke_generator_heater_off(gun->smoke);
                 }
@@ -204,9 +211,17 @@ static void* gun_fx_processing_thread(void *arg) {
                 }
                 
                 if (previous_rate_index < 0) {
-                    printf("[GUN] Firing started (%d RPM)\n", gun->rates[new_rate_index].rounds_per_minute);
+                    LOG_STATE(LOG_GUN, "IDLE", "FIRING");
+                    LOG_INFO(LOG_GUN, "Firing started at %d RPM (rate %d) | Shot interval: %d ms",
+                            gun->rates[new_rate_index].rounds_per_minute,
+                            new_rate_index + 1,
+                            shot_interval_ms);
                 } else {
-                    printf("[GUN] Rate changed to %d RPM\n", gun->rates[new_rate_index].rounds_per_minute);
+                    LOG_STATE(LOG_GUN, "FIRING", "RATE_CHANGED");
+                    LOG_INFO(LOG_GUN, "Rate changed to %d RPM (rate %d) | Shot interval: %d ms",
+                            gun->rates[new_rate_index].rounds_per_minute,
+                            new_rate_index + 1,
+                            shot_interval_ms);
                 }
             } else {
                 // Stop firing
@@ -224,14 +239,17 @@ static void* gun_fx_processing_thread(void *arg) {
                         // Start delay timer
                         clock_gettime(CLOCK_MONOTONIC, &gun->smoke_stop_time);
                         gun->smoke_fan_pending_off = true;
-                        printf("[GUN] Firing stopped (smoke fan will stop in %d ms)\n", gun->smoke_fan_off_delay_ms);
+                        LOG_STATE(LOG_GUN, "FIRING", "STOPPING");
+                        LOG_INFO(LOG_GUN, "Firing stopped | Smoke fan will stop in %d ms", gun->smoke_fan_off_delay_ms);
                     } else {
                         // Immediate off
                         smoke_generator_fan_off(gun->smoke);
-                        printf("[GUN] Firing stopped\n");
+                        LOG_STATE(LOG_GUN, "FIRING", "IDLE");
+                        LOG_INFO(LOG_GUN, "Firing stopped immediately");
                     }
                 } else {
-                    printf("[GUN] Firing stopped\n");
+                    LOG_STATE(LOG_GUN, "FIRING", "IDLE");
+                    LOG_INFO(LOG_GUN, "Firing stopped (no smoke)");
                 }
             }
         }
@@ -246,7 +264,8 @@ static void* gun_fx_processing_thread(void *arg) {
             if (elapsed_ms >= gun->smoke_fan_off_delay_ms) {
                 smoke_generator_fan_off(gun->smoke);
                 gun->smoke_fan_pending_off = false;
-                printf("[GUN] Smoke fan stopped (after %d ms delay)\n", gun->smoke_fan_off_delay_ms);
+                LOG_DEBUG(LOG_GUN, "Smoke fan stopped after %d ms delay (actual: %.1f ms)",
+                         gun->smoke_fan_off_delay_ms, elapsed_ms);
             }
         }
         
@@ -293,20 +312,20 @@ static void* gun_fx_processing_thread(void *arg) {
         usleep(10000); // 10ms loop
     }
     
-    printf("[GUN] Processing thread stopped\n");
+    LOG_INFO(LOG_GUN, "Processing thread stopped");
     return NULL;
 }
 
 GunFX* gun_fx_create(AudioMixer *mixer, int audio_channel,
                      const GunFXConfig *config) {
     if (!config) {
-        fprintf(stderr, "[GUN] Error: Config is NULL\n");
+        LOG_ERROR(LOG_GUN, "Config is NULL");
         return NULL;
     }
     
-    GunFX *gun = (GunFX *)calloc(1, sizeof(GunFX));
+    GunFX *gun = malloc(sizeof(GunFX));
     if (!gun) {
-        fprintf(stderr, "[GUN] Error: Cannot allocate memory for gun FX\n");
+        LOG_ERROR(LOG_GUN, "Cannot allocate memory for gun FX");
         return NULL;
     }
     
@@ -333,20 +352,22 @@ GunFX* gun_fx_create(AudioMixer *mixer, int audio_channel,
     if (config->nozzle_flash_pin >= 0) {
         gun->nozzle_flash = led_create(config->nozzle_flash_pin);
         if (!gun->nozzle_flash) {
-            fprintf(stderr, "[GUN] Warning: Failed to create nozzle flash LED\n");
+            LOG_WARN(LOG_GUN, "Failed to create nozzle flash LED on GPIO %d", config->nozzle_flash_pin);
         } else {
-            printf("[GUN] Nozzle flash LED on pin %d\n", config->nozzle_flash_pin);
+            LOG_DEBUG(LOG_GUN, "Nozzle flash LED initialized on GPIO %d", config->nozzle_flash_pin);
         }
     }
     
     // Create smoke generator if pins specified
+    // Create smoke generator if pins specified
     if (config->smoke_fan_pin >= 0 && config->smoke_heater_pin >= 0) {
         gun->smoke = smoke_generator_create(config->smoke_heater_pin, config->smoke_fan_pin);
         if (!gun->smoke) {
-            fprintf(stderr, "[GUN] Warning: Failed to create smoke generator\n");
+            LOG_WARN(LOG_GUN, "Failed to create smoke generator (heater GPIO %d, fan GPIO %d)",
+                    config->smoke_heater_pin, config->smoke_fan_pin);
         } else {
-            printf("[GUN] Smoke generator (heater: pin %d, fan: pin %d)\n", 
-                   config->smoke_heater_pin, config->smoke_fan_pin);
+            LOG_DEBUG(LOG_GUN, "Smoke generator initialized (heater GPIO %d, fan GPIO %d)",
+                     config->smoke_heater_pin, config->smoke_fan_pin);
         }
     }
     
@@ -354,10 +375,10 @@ GunFX* gun_fx_create(AudioMixer *mixer, int audio_channel,
     if (config->trigger_pin >= 0) {
         gun->trigger_pwm_monitor = pwm_monitor_create(config->trigger_pin, NULL, NULL);
         if (!gun->trigger_pwm_monitor) {
-            fprintf(stderr, "[GUN] Warning: Failed to create trigger PWM monitor\n");
+            LOG_WARN(LOG_GUN, "Failed to create trigger PWM monitor on GPIO %d", config->trigger_pin);
         } else {
             pwm_monitor_start(gun->trigger_pwm_monitor);
-            printf("[GUN] Trigger PWM monitoring on pin %d\n", config->trigger_pin);
+            LOG_DEBUG(LOG_GUN, "Trigger PWM monitoring started on GPIO %d", config->trigger_pin);
         }
     }
     
@@ -365,10 +386,12 @@ GunFX* gun_fx_create(AudioMixer *mixer, int audio_channel,
     if (config->smoke_heater_toggle_pin >= 0) {
         gun->smoke_heater_toggle_monitor = pwm_monitor_create(config->smoke_heater_toggle_pin, NULL, NULL);
         if (!gun->smoke_heater_toggle_monitor) {
-            fprintf(stderr, "[GUN] Warning: Failed to create smoke heater toggle monitor\n");
+            LOG_WARN(LOG_GUN, "Failed to create smoke heater toggle monitor on GPIO %d",
+                    config->smoke_heater_toggle_pin);
         } else {
             pwm_monitor_start(gun->smoke_heater_toggle_monitor);
-            printf("[GUN] Smoke heater toggle monitoring on pin %d\n", config->smoke_heater_toggle_pin);
+            LOG_DEBUG(LOG_GUN, "Smoke heater toggle monitoring started on GPIO %d (threshold: %d µs)",
+                     config->smoke_heater_toggle_pin, config->smoke_heater_pwm_threshold_us);
         }
     }
     
@@ -376,18 +399,19 @@ GunFX* gun_fx_create(AudioMixer *mixer, int audio_channel,
     if (config->pitch_servo.enabled) {
         gun->pitch_servo = servo_create(&config->pitch_servo);
         if (!gun->pitch_servo) {
-            fprintf(stderr, "[GUN] Warning: Failed to create pitch servo\n");
+            LOG_WARN(LOG_GUN, "Failed to create pitch servo");
         } else {
             gun->pitch_pwm_monitor = pwm_monitor_create(config->pitch_servo.pwm_pin, NULL, NULL);
             if (!gun->pitch_pwm_monitor) {
-                fprintf(stderr, "[GUN] Warning: Failed to create pitch PWM monitor\n");
+                LOG_WARN(LOG_GUN, "Failed to create pitch PWM monitor on GPIO %d",
+                        config->pitch_servo.pwm_pin);
                 servo_destroy(gun->pitch_servo);
                 gun->pitch_servo = NULL;
             } else {
                 pwm_monitor_start(gun->pitch_pwm_monitor);
                 gun->pitch_pwm_pin = config->pitch_servo.pwm_pin;
-                printf("[GUN] Pitch servo (input pin: %d, output pin: %d)\n", 
-                       config->pitch_servo.pwm_pin, config->pitch_servo.output_pin);
+                LOG_DEBUG(LOG_GUN, "Pitch servo initialized (input GPIO %d, output GPIO %d)",
+                         config->pitch_servo.pwm_pin, config->pitch_servo.output_pin);
             }
         }
     }
@@ -396,18 +420,19 @@ GunFX* gun_fx_create(AudioMixer *mixer, int audio_channel,
     if (config->yaw_servo.enabled) {
         gun->yaw_servo = servo_create(&config->yaw_servo);
         if (!gun->yaw_servo) {
-            fprintf(stderr, "[GUN] Warning: Failed to create yaw servo\n");
+            LOG_WARN(LOG_GUN, "Failed to create yaw servo");
         } else {
             gun->yaw_pwm_monitor = pwm_monitor_create(config->yaw_servo.pwm_pin, NULL, NULL);
             if (!gun->yaw_pwm_monitor) {
-                fprintf(stderr, "[GUN] Warning: Failed to create yaw PWM monitor\n");
+                LOG_WARN(LOG_GUN, "Failed to create yaw PWM monitor on GPIO %d",
+                        config->yaw_servo.pwm_pin);
                 servo_destroy(gun->yaw_servo);
                 gun->yaw_servo = NULL;
             } else {
                 pwm_monitor_start(gun->yaw_pwm_monitor);
                 gun->yaw_pwm_pin = config->yaw_servo.pwm_pin;
-                printf("[GUN] Yaw servo (input pin: %d, output pin: %d)\n", 
-                       config->yaw_servo.pwm_pin, config->yaw_servo.output_pin);
+                LOG_DEBUG(LOG_GUN, "Yaw servo initialized (input GPIO %d, output GPIO %d)",
+                         config->yaw_servo.pwm_pin, config->yaw_servo.output_pin);
             }
         }
     }
@@ -415,7 +440,7 @@ GunFX* gun_fx_create(AudioMixer *mixer, int audio_channel,
     // Start processing thread
     gun->processing_running = true;
     if (pthread_create(&gun->processing_thread, NULL, gun_fx_processing_thread, gun) != 0) {
-        fprintf(stderr, "[GUN] Error: Failed to create processing thread\n");
+        LOG_ERROR(LOG_GUN, "Failed to create processing thread");
         gun->processing_running = false;
         
         if (gun->trigger_pwm_monitor) {
@@ -433,7 +458,7 @@ GunFX* gun_fx_create(AudioMixer *mixer, int audio_channel,
         return NULL;
     }
     
-    printf("[GUN] Gun FX created\n");
+    LOG_INIT(LOG_GUN, "Gun FX system ready");
     return gun;
 }
 
@@ -476,7 +501,7 @@ void gun_fx_destroy(GunFX *gun) {
     pthread_mutex_destroy(&gun->mutex);
     free(gun);
     
-    printf("[GUN] Gun FX destroyed\n");
+    LOG_SHUTDOWN(LOG_GUN, "Gun FX system");
 }
 
 int gun_fx_set_rates_of_fire(GunFX *gun, const RateOfFire *rates, int count) {
@@ -492,7 +517,7 @@ int gun_fx_set_rates_of_fire(GunFX *gun, const RateOfFire *rates, int count) {
     // Allocate and copy new rates
     gun->rates = (RateOfFire *)malloc(sizeof(RateOfFire) * count);
     if (!gun->rates) {
-        fprintf(stderr, "[GUN] Error: Cannot allocate memory for rates\n");
+        LOG_ERROR(LOG_GUN, "Cannot allocate memory for rates array (%d entries)", count);
         gun->rate_count = 0;
         pthread_mutex_unlock(&gun->mutex);
         return -1;
@@ -503,7 +528,8 @@ int gun_fx_set_rates_of_fire(GunFX *gun, const RateOfFire *rates, int count) {
     
     pthread_mutex_unlock(&gun->mutex);
     
-    printf("[GUN] Configured %d rate(s) of fire\n", count);
+    LOG_INFO(LOG_GUN, "Configured %d rate(s) of fire", count);
+    LOG_DEBUG(LOG_GUN, "Rates: %s", count > 0 ? "updated" : "empty");
     return 0;
 }
 

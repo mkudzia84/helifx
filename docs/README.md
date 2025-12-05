@@ -482,6 +482,12 @@ This will:
 - GPIO control using pigpio library
 - YAML parsing with libyaml
 
+## Documentation
+
+Additional documentation available:
+- [Wiring Guide](WIRING.md) - Complete wiring diagrams and hardware setup
+- [Logging System](LOGGING.md) - Logging architecture and usage guide
+
 ## License
 
 [Your License Here]

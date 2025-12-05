@@ -1,5 +1,6 @@
 #include "smoke_generator.h"
 #include "gpio.h"
+#include "logging.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>

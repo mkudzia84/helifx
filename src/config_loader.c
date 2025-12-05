@@ -1,4 +1,5 @@
 #include "config_loader.h"
+#include "logging.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -447,72 +448,91 @@ int config_validate(const HeliFXConfig *config) {
 }
 
 void config_print(const HeliFXConfig *config) {
-    printf("\n[CONFIG] Configuration:\n");
-    printf("========================================\n");
+    printf("\n[CONFIG] System Configuration\n");
+    printf("════════════════════════════════════════════════════════════════\n");
     
+    // Engine FX Section
+    printf("\nENGINE FX: %s\n", config->engine.enabled ? "✓ ENABLED" : "✗ DISABLED");
     if (config->engine.enabled) {
-        printf("Engine FX: ENABLED\n");
-        printf("  Pin: %d\n", config->engine.pin);
-        printf("  Threshold: %d µs\n", config->engine.threshold_us);
-        printf("  Starting sound: %s\n", config->engine.starting_file);
-        printf("  Running sound: %s\n", config->engine.running_file);
-        printf("  Stopping sound: %s\n", config->engine.stopping_file);
-        printf("  Starting offset: %d ms\n", config->engine.starting_offset_ms);
-        printf("  Stopping offset: %d ms\n", config->engine.stopping_offset_ms);
-    } else {
-        printf("Engine FX: DISABLED\n");
+        printf("  PWM Input Pin: %d µs\n", config->engine.pin);
+        printf("  Throttle Threshold: %d µs\n", config->engine.threshold_us);
+        printf("  Audio Files:\n");
+        printf("    Starting:  %s\n", config->engine.starting_file);
+        printf("    Running:   %s\n", config->engine.running_file);
+        printf("    Stopping:  %s\n", config->engine.stopping_file);
+        printf("  Transition Offsets:\n");
+        printf("    Starting:  %d ms\n", config->engine.starting_offset_ms);
+        printf("    Stopping:  %d ms\n", config->engine.stopping_offset_ms);
     }
     
-    printf("\n");
-    
+    // Gun FX Section
+    printf("\nGUN FX: %s\n", config->gun.enabled ? "✓ ENABLED" : "✗ DISABLED");
     if (config->gun.enabled) {
-        printf("Gun FX: ENABLED\n");
-        printf("  Trigger pin: %d\n", config->gun.trigger_pin);
-        printf("  Nozzle flash: %s (pin %d)\n", 
-               config->gun.nozzle_flash_enabled ? "ENABLED" : "DISABLED",
+        printf("  Trigger PWM Input Pin: %d\n", config->gun.trigger_pin);
+        printf("  Nozzle Flash LED: %s (GPIO %d)\n", 
+               config->gun.nozzle_flash_enabled ? "✓ ENABLED" : "✗ DISABLED",
                config->gun.nozzle_flash_pin);
-        printf("  Smoke: %s\n", config->gun.smoke_enabled ? "ENABLED" : "DISABLED");
+        
+        // Smoke System
+        printf("  Smoke System: %s\n", config->gun.smoke_enabled ? "✓ ENABLED" : "✗ DISABLED");
         if (config->gun.smoke_enabled) {
-            printf("    Fan pin: %d\n", config->gun.smoke_fan_pin);
-            printf("    Heater pin: %d\n", config->gun.smoke_heater_pin);
-            printf("    Heater toggle pin: %d\n", config->gun.smoke_heater_toggle_pin);
-            printf("    Fan off delay: %d ms\n", config->gun.smoke_fan_off_delay_ms);
+            printf("    Fan Control GPIO: %d\n", config->gun.smoke_fan_pin);
+            printf("    Heater Control GPIO: %d\n", config->gun.smoke_heater_pin);
+            printf("    Heater Toggle Input GPIO: %d\n", config->gun.smoke_heater_toggle_pin);
+            printf("    Heater PWM Threshold: %d µs\n", config->gun.smoke_heater_pwm_threshold_us);
+            printf("    Fan Off Delay: %d ms\n", config->gun.smoke_fan_off_delay_ms);
         }
-        printf("  Rates of fire: %d\n", config->gun.rate_count);
+        
+        // Rates of Fire
+        printf("  Rates of Fire: %d\n", config->gun.rate_count);
         for (int i = 0; i < config->gun.rate_count; i++) {
-            printf("    %d. %s: %d RPM @ %d µs (%s)\n",
+            printf("    [%d] %s: %d RPM @ %d µs → %s\n",
                    i + 1,
                    config->gun.rates[i].name,
                    config->gun.rates[i].rpm,
                    config->gun.rates[i].pwm_threshold_us,
                    config->gun.rates[i].sound_file);
         }
-        printf("  Turret Control:\n");
-        printf("    Pitch servo: %s\n", config->gun.pitch_servo.enabled ? "ENABLED" : "DISABLED");
+        
+        // Turret Control Servos
+        printf("  Turret Control Servos:\n");
+        
+        printf("    ├─ PITCH Servo: %s\n", config->gun.pitch_servo.enabled ? "✓ ENABLED" : "✗ DISABLED");
         if (config->gun.pitch_servo.enabled) {
-            printf("      PWM pin: %d, Output pin: %d\n", config->gun.pitch_servo.pwm_pin, config->gun.pitch_servo.output_pin);
-            printf("      Input: %d-%d us, Output: %d-%d us\n", 
-                   config->gun.pitch_servo.input_min_us, config->gun.pitch_servo.input_max_us,
-                   config->gun.pitch_servo.output_min_us, config->gun.pitch_servo.output_max_us);
-            printf("      Speed: %.0f us/s, Accel: %.0f us/s², Rate: %d Hz\n",
-                   config->gun.pitch_servo.max_speed_us_per_sec, config->gun.pitch_servo.max_accel_us_per_sec2,
+            printf("    │  PWM Input (GPIO %d) ← Range: %d-%d µs\n",
+                   config->gun.pitch_servo.pwm_pin,
+                   config->gun.pitch_servo.input_min_us,
+                   config->gun.pitch_servo.input_max_us);
+            printf("    │  PWM Output (GPIO %d) → Range: %d-%d µs\n",
+                   config->gun.pitch_servo.output_pin,
+                   config->gun.pitch_servo.output_min_us,
+                   config->gun.pitch_servo.output_max_us);
+            printf("    │  Motion Limits: %.0f µs/s speed | %.0f µs/s² accel\n",
+                   config->gun.pitch_servo.max_speed_us_per_sec,
+                   config->gun.pitch_servo.max_accel_us_per_sec2);
+            printf("    │  Update Rate: %d Hz\n",
                    config->gun.pitch_servo.update_rate_hz);
         }
-        printf("    Yaw servo: %s\n", config->gun.yaw_servo.enabled ? "ENABLED" : "DISABLED");
+        
+        printf("    └─ YAW Servo: %s\n", config->gun.yaw_servo.enabled ? "✓ ENABLED" : "✗ DISABLED");
         if (config->gun.yaw_servo.enabled) {
-            printf("      PWM pin: %d, Output pin: %d\n", config->gun.yaw_servo.pwm_pin, config->gun.yaw_servo.output_pin);
-            printf("      Input: %d-%d us, Output: %d-%d us\n", 
-                   config->gun.yaw_servo.input_min_us, config->gun.yaw_servo.input_max_us,
-                   config->gun.yaw_servo.output_min_us, config->gun.yaw_servo.output_max_us);
-            printf("      Speed: %.0f us/s, Accel: %.0f us/s², Rate: %d Hz\n",
-                   config->gun.yaw_servo.max_speed_us_per_sec, config->gun.yaw_servo.max_accel_us_per_sec2,
+            printf("       PWM Input (GPIO %d) ← Range: %d-%d µs\n",
+                   config->gun.yaw_servo.pwm_pin,
+                   config->gun.yaw_servo.input_min_us,
+                   config->gun.yaw_servo.input_max_us);
+            printf("       PWM Output (GPIO %d) → Range: %d-%d µs\n",
+                   config->gun.yaw_servo.output_pin,
+                   config->gun.yaw_servo.output_min_us,
+                   config->gun.yaw_servo.output_max_us);
+            printf("       Motion Limits: %.0f µs/s speed | %.0f µs/s² accel\n",
+                   config->gun.yaw_servo.max_speed_us_per_sec,
+                   config->gun.yaw_servo.max_accel_us_per_sec2);
+            printf("       Update Rate: %d Hz\n",
                    config->gun.yaw_servo.update_rate_hz);
         }
-    } else {
-        printf("Gun FX: DISABLED\n");
     }
     
-    printf("========================================\n\n");
+    printf("\n════════════════════════════════════════════════════════════════\n\n");
 }
 
 void config_free(HeliFXConfig *config) {
