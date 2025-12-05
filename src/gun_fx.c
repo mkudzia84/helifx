@@ -547,7 +547,7 @@ int gun_fx_get_current_rate_index(GunFX *gun) {
     if (!gun) return -1;
     
     pthread_mutex_lock(&gun->mutex);
-    int rate = gun->current_rate;
+    int rate = gun->current_rate_index;
     pthread_mutex_unlock(&gun->mutex);
     
     return rate;
