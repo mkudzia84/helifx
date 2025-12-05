@@ -4,6 +4,10 @@ CFLAGS = -Wall -Wextra -Werror -Wno-unused-function -std=c11 -pthread -O2 -D_DEF
 INCLUDES = -I./include
 LIBS = -lpthread -ldl -lm -latomic -lyaml
 
+# Build options
+# Set to 0 to disable JetiEX telemetry support
+ENABLE_JETIEX ?= 1
+
 # Directories
 SRC_DIR = src
 INCLUDE_DIR = include
@@ -15,7 +19,13 @@ SCRIPTS_DIR = scripts
 HELIFX = $(BUILD_DIR)/helifx
 DEMO_TARGETS = $(BUILD_DIR)/mixer_demo $(BUILD_DIR)/gpio_demo \
                $(BUILD_DIR)/engine_fx_demo $(BUILD_DIR)/gun_fx_demo \
-               $(BUILD_DIR)/servo_demo $(BUILD_DIR)/jetiex_demo
+               $(BUILD_DIR)/servo_demo
+
+# Conditionally add JetiEX demo
+ifeq ($(ENABLE_JETIEX),1)
+DEMO_TARGETS += $(BUILD_DIR)/jetiex_demo
+CFLAGS += -DENABLE_JETIEX
+endif
 
 # All targets
 TARGETS = $(HELIFX) $(DEMO_TARGETS)
@@ -24,8 +34,12 @@ TARGETS = $(HELIFX) $(DEMO_TARGETS)
 HELIFX_SRCS = $(SRC_DIR)/main.c $(SRC_DIR)/config_loader.c \
               $(SRC_DIR)/engine_fx.c $(SRC_DIR)/gun_fx.c \
               $(SRC_DIR)/lights.c $(SRC_DIR)/smoke_generator.c \
-              $(SRC_DIR)/audio_player.c $(SRC_DIR)/gpio.c $(SRC_DIR)/servo.c \
-              $(SRC_DIR)/jetiex.c
+              $(SRC_DIR)/audio_player.c $(SRC_DIR)/gpio.c $(SRC_DIR)/servo.c
+
+# Conditionally add JetiEX sources
+ifeq ($(ENABLE_JETIEX),1)
+HELIFX_SRCS += $(SRC_DIR)/jetiex.c $(SRC_DIR)/helifx_jetiex.c
+endif
 
 MIXER_DEMO_SRCS = $(DEMO_DIR)/mixer_demo.c $(SRC_DIR)/audio_player.c $(SRC_DIR)/gpio.c
 GPIO_DEMO_SRCS = $(DEMO_DIR)/gpio_demo.c $(SRC_DIR)/gpio.c
@@ -52,6 +66,12 @@ JETIEX_DEMO_OBJS = $(BUILD_DIR)/demo/jetiex_demo.o $(BUILD_DIR)/jetiex.o
 # Default target
 .PHONY: all
 all: $(TARGETS)
+
+# Build without JetiEX telemetry support
+# Usage: make ENABLE_JETIEX=0
+.PHONY: nojetiex
+nojetiex:
+	$(MAKE) ENABLE_JETIEX=0
 
 # Demo target
 .PHONY: demo

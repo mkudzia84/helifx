@@ -48,6 +48,15 @@ int config_load(const char *config_file, HeliFXConfig *config) {
     config->gun.trigger_pin = 27;
     config->gun.rates = NULL;
     config->gun.rate_count = 0;
+#ifdef ENABLE_JETIEX
+    config->jetiex.enabled = false;
+    config->jetiex.remote_config = false;
+    strncpy(config->jetiex.serial_port, "/dev/ttyAMA0", sizeof(config->jetiex.serial_port) - 1);
+    config->jetiex.baud_rate = 115200;
+    config->jetiex.manufacturer_id = 0xA409;
+    config->jetiex.device_id = 0x0001;
+    config->jetiex.update_rate_hz = 10;
+#endif
     config->gun.nozzle_flash_enabled = true;
     config->gun.nozzle_flash_pin = 23;
     config->gun.smoke_enabled = true;
@@ -331,6 +340,48 @@ int config_load(const char *config_file, HeliFXConfig *config) {
                             }
                         }
                     }
+#ifdef ENABLE_JETIEX
+                    // JetiEX section parsing
+                    else if (strcmp(current_section, "jetiex") == 0) {
+                        if (strcmp(value, "enabled") == 0) {
+                            yaml_parser_parse(&parser, &event);
+                            config->jetiex.enabled = (strcmp((char *)event.data.scalar.value, "true") == 0);
+                            yaml_event_delete(&event);
+                            continue;
+                        } else if (strcmp(value, "remote_config") == 0) {
+                            yaml_parser_parse(&parser, &event);
+                            config->jetiex.remote_config = (strcmp((char *)event.data.scalar.value, "true") == 0);
+                            yaml_event_delete(&event);
+                            continue;
+                        } else if (strcmp(value, "serial_port") == 0) {
+                            yaml_parser_parse(&parser, &event);
+                            strncpy(config->jetiex.serial_port, (char *)event.data.scalar.value, 
+                                   sizeof(config->jetiex.serial_port) - 1);
+                            yaml_event_delete(&event);
+                            continue;
+                        } else if (strcmp(value, "baud_rate") == 0) {
+                            yaml_parser_parse(&parser, &event);
+                            config->jetiex.baud_rate = atoi((char *)event.data.scalar.value);
+                            yaml_event_delete(&event);
+                            continue;
+                        } else if (strcmp(value, "manufacturer_id") == 0) {
+                            yaml_parser_parse(&parser, &event);
+                            config->jetiex.manufacturer_id = strtol((char *)event.data.scalar.value, NULL, 16);
+                            yaml_event_delete(&event);
+                            continue;
+                        } else if (strcmp(value, "device_id") == 0) {
+                            yaml_parser_parse(&parser, &event);
+                            config->jetiex.device_id = strtol((char *)event.data.scalar.value, NULL, 16);
+                            yaml_event_delete(&event);
+                            continue;
+                        } else if (strcmp(value, "update_rate_hz") == 0) {
+                            yaml_parser_parse(&parser, &event);
+                            config->jetiex.update_rate_hz = atoi((char *)event.data.scalar.value);
+                            yaml_event_delete(&event);
+                            continue;
+                        }
+                    }
+#endif
                     // Nested values (sounds)
                     if (strcmp(current_section, "engine_fx") == 0 && strcmp(current_subsection, "sounds") == 0) {
                         if (strcmp(current_key, "starting") == 0 && strcmp(value, "file") == 0) {
@@ -541,4 +592,119 @@ void config_free(HeliFXConfig *config) {
         config->gun.rates = NULL;
         config->gun.rate_count = 0;
     }
+}
+
+int config_save(const char *config_file, const HeliFXConfig *config) {
+    FILE *fh = fopen(config_file, "w");
+    if (!fh) {
+        LOG_ERROR(LOG_CONFIG, "Cannot open config file '%s' for writing", config_file);
+        return -1;
+    }
+    
+    yaml_emitter_t emitter;
+    yaml_event_t event;
+    
+    if (!yaml_emitter_initialize(&emitter)) {
+        LOG_ERROR(LOG_CONFIG, "Failed to initialize YAML emitter");
+        fclose(fh);
+        return -1;
+    }
+    
+    yaml_emitter_set_output_file(&emitter, fh);
+    
+    // Start document
+    yaml_stream_start_event_initialize(&event, YAML_UTF8_ENCODING);
+    yaml_emitter_emit(&emitter, &event);
+    
+    yaml_document_start_event_initialize(&event, NULL, NULL, NULL, 1);
+    yaml_emitter_emit(&emitter, &event);
+    
+    yaml_mapping_start_event_initialize(&event, NULL, (yaml_char_t *)YAML_MAP_TAG, 1, YAML_ANY_MAPPING_STYLE);
+    yaml_emitter_emit(&emitter, &event);
+    
+    // Engine section
+    yaml_scalar_event_initialize(&event, NULL, (yaml_char_t *)YAML_STR_TAG, (yaml_char_t *)"engine", -1, 1, 1, YAML_PLAIN_SCALAR_STYLE);
+    yaml_emitter_emit(&emitter, &event);
+    
+    yaml_mapping_start_event_initialize(&event, NULL, (yaml_char_t *)YAML_MAP_TAG, 1, YAML_ANY_MAPPING_STYLE);
+    yaml_emitter_emit(&emitter, &event);
+    
+    // Engine.enabled
+    yaml_scalar_event_initialize(&event, NULL, (yaml_char_t *)YAML_STR_TAG, (yaml_char_t *)"enabled", -1, 1, 1, YAML_PLAIN_SCALAR_STYLE);
+    yaml_emitter_emit(&emitter, &event);
+    yaml_scalar_event_initialize(&event, NULL, (yaml_char_t *)YAML_BOOL_TAG, (yaml_char_t *)(config->engine.enabled ? "true" : "false"), -1, 1, 1, YAML_PLAIN_SCALAR_STYLE);
+    yaml_emitter_emit(&emitter, &event);
+    
+    // Engine.pin
+    yaml_scalar_event_initialize(&event, NULL, (yaml_char_t *)YAML_STR_TAG, (yaml_char_t *)"pin", -1, 1, 1, YAML_PLAIN_SCALAR_STYLE);
+    yaml_emitter_emit(&emitter, &event);
+    char pin_str[32];
+    snprintf(pin_str, sizeof(pin_str), "%d", config->engine.pin);
+    yaml_scalar_event_initialize(&event, NULL, (yaml_char_t *)YAML_INT_TAG, (yaml_char_t *)pin_str, -1, 1, 1, YAML_PLAIN_SCALAR_STYLE);
+    yaml_emitter_emit(&emitter, &event);
+    
+    // Engine.threshold_us
+    yaml_scalar_event_initialize(&event, NULL, (yaml_char_t *)YAML_STR_TAG, (yaml_char_t *)"threshold_us", -1, 1, 1, YAML_PLAIN_SCALAR_STYLE);
+    yaml_emitter_emit(&emitter, &event);
+    char threshold_str[32];
+    snprintf(threshold_str, sizeof(threshold_str), "%d", config->engine.threshold_us);
+    yaml_scalar_event_initialize(&event, NULL, (yaml_char_t *)YAML_INT_TAG, (yaml_char_t *)threshold_str, -1, 1, 1, YAML_PLAIN_SCALAR_STYLE);
+    yaml_emitter_emit(&emitter, &event);
+    
+    yaml_mapping_end_event_initialize(&event);
+    yaml_emitter_emit(&emitter, &event);
+    
+    // Gun section (simplified - add more fields as needed)
+    yaml_scalar_event_initialize(&event, NULL, (yaml_char_t *)YAML_STR_TAG, (yaml_char_t *)"gun", -1, 1, 1, YAML_PLAIN_SCALAR_STYLE);
+    yaml_emitter_emit(&emitter, &event);
+    
+    yaml_mapping_start_event_initialize(&event, NULL, (yaml_char_t *)YAML_MAP_TAG, 1, YAML_ANY_MAPPING_STYLE);
+    yaml_emitter_emit(&emitter, &event);
+    
+    // Add gun fields here
+    yaml_scalar_event_initialize(&event, NULL, (yaml_char_t *)YAML_STR_TAG, (yaml_char_t *)"enabled", -1, 1, 1, YAML_PLAIN_SCALAR_STYLE);
+    yaml_emitter_emit(&emitter, &event);
+    yaml_scalar_event_initialize(&event, NULL, (yaml_char_t *)YAML_BOOL_TAG, (yaml_char_t *)(config->gun.enabled ? "true" : "false"), -1, 1, 1, YAML_PLAIN_SCALAR_STYLE);
+    yaml_emitter_emit(&emitter, &event);
+    
+    yaml_mapping_end_event_initialize(&event);
+    yaml_emitter_emit(&emitter, &event);
+    
+#ifdef ENABLE_JETIEX
+    // JetiEX section
+    yaml_scalar_event_initialize(&event, NULL, (yaml_char_t *)YAML_STR_TAG, (yaml_char_t *)"jetiex", -1, 1, 1, YAML_PLAIN_SCALAR_STYLE);
+    yaml_emitter_emit(&emitter, &event);
+    
+    yaml_mapping_start_event_initialize(&event, NULL, (yaml_char_t *)YAML_MAP_TAG, 1, YAML_ANY_MAPPING_STYLE);
+    yaml_emitter_emit(&emitter, &event);
+    
+    yaml_scalar_event_initialize(&event, NULL, (yaml_char_t *)YAML_STR_TAG, (yaml_char_t *)"enabled", -1, 1, 1, YAML_PLAIN_SCALAR_STYLE);
+    yaml_emitter_emit(&emitter, &event);
+    yaml_scalar_event_initialize(&event, NULL, (yaml_char_t *)YAML_BOOL_TAG, (yaml_char_t *)(config->jetiex.enabled ? "true" : "false"), -1, 1, 1, YAML_PLAIN_SCALAR_STYLE);
+    yaml_emitter_emit(&emitter, &event);
+    
+    yaml_scalar_event_initialize(&event, NULL, (yaml_char_t *)YAML_STR_TAG, (yaml_char_t *)"remote_config", -1, 1, 1, YAML_PLAIN_SCALAR_STYLE);
+    yaml_emitter_emit(&emitter, &event);
+    yaml_scalar_event_initialize(&event, NULL, (yaml_char_t *)YAML_BOOL_TAG, (yaml_char_t *)(config->jetiex.remote_config ? "true" : "false"), -1, 1, 1, YAML_PLAIN_SCALAR_STYLE);
+    yaml_emitter_emit(&emitter, &event);
+    
+    yaml_mapping_end_event_initialize(&event);
+    yaml_emitter_emit(&emitter, &event);
+#endif
+    
+    // End root mapping
+    yaml_mapping_end_event_initialize(&event);
+    yaml_emitter_emit(&emitter, &event);
+    
+    yaml_document_end_event_initialize(&event, 1);
+    yaml_emitter_emit(&emitter, &event);
+    
+    yaml_stream_end_event_initialize(&event);
+    yaml_emitter_emit(&emitter, &event);
+    
+    yaml_emitter_delete(&emitter);
+    fclose(fh);
+    
+    LOG_INFO(LOG_CONFIG, "Configuration saved to %s", config_file);
+    return 0;
 }

@@ -105,4 +105,20 @@ int servo_set_config(Servo *servo, const ServoConfig *config);
  */
 int servo_get_config(const Servo *servo, ServoConfig *config);
 
+/**
+ * @brief Set maximum speed
+ * 
+ * @param servo Servo instance
+ * @param max_speed_us_per_sec Maximum speed in us/second
+ */
+void servo_set_max_speed(Servo *servo, float max_speed_us_per_sec);
+
+/**
+ * @brief Set maximum acceleration
+ * 
+ * @param servo Servo instance
+ * @param max_accel_us_per_sec2 Maximum acceleration in us/second^2
+ */
+void servo_set_max_acceleration(Servo *servo, float max_accel_us_per_sec2);
+
 #endif // SERVO_H

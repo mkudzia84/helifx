@@ -13,6 +13,9 @@
 #include "gpio.h"
 #include "config_loader.h"
 #include "logging.h"
+#ifdef ENABLE_JETIEX
+#include "helifx_jetiex.h"
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <signal.h>
@@ -172,15 +175,27 @@ int main(int argc, char *argv[]) {
         }
     }
     
+#ifdef ENABLE_JETIEX
+    // Initialize JetiEX telemetry
+    JetiEX *jetiex = helifx_jetiex_init(&config, argv[1], gun, engine);
+#endif
+    
     printf("\n[HELIFX] System ready. Press Ctrl+C to exit.\n\n");
     
-    // Main loop
+    // Main loop - update telemetry
     while (running) {
+#ifdef ENABLE_JETIEX
+        helifx_jetiex_update(jetiex, gun, engine);
+#endif
         sleep(1);
     }
     
     // Cleanup
     printf("[HELIFX] Cleaning up...\n");
+    
+#ifdef ENABLE_JETIEX
+    helifx_jetiex_cleanup(jetiex);
+#endif
     
     if (engine) {
         engine_fx_destroy(engine);

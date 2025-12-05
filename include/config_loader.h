@@ -2,6 +2,7 @@
 #define CONFIG_LOADER_H
 
 #include <stdbool.h>
+#include <stdint.h>
 
 // Rate of fire configuration
 typedef struct RateOfFireConfig {
@@ -59,10 +60,26 @@ typedef struct GunFXConfig {
     int rate_count;
 } GunFXConfig;
 
+#ifdef ENABLE_JETIEX
+// JetiEX telemetry configuration
+typedef struct JetiEXConfigData {
+    bool enabled;
+    bool remote_config;
+    char serial_port[256];
+    uint32_t baud_rate;
+    uint16_t manufacturer_id;
+    uint16_t device_id;
+    uint8_t update_rate_hz;
+} JetiEXConfigData;
+#endif
+
 // Complete helicopter FX configuration
 typedef struct HeliFXConfig {
     EngineFXConfig engine;
     GunFXConfig gun;
+#ifdef ENABLE_JETIEX
+    JetiEXConfigData jetiex;
+#endif
 } HeliFXConfig;
 
 /**
@@ -91,5 +108,13 @@ void config_print(const HeliFXConfig *config);
  * @param config Configuration to free
  */
 void config_free(HeliFXConfig *config);
+
+/**
+ * Save configuration to YAML file
+ * @param config_file Path to YAML configuration file
+ * @param config Configuration to save
+ * @return 0 on success, -1 on error
+ */
+int config_save(const char *config_file, const HeliFXConfig *config);
 
 #endif // CONFIG_LOADER_H

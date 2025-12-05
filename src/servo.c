@@ -315,3 +315,19 @@ int servo_get_config(const Servo *servo, ServoConfig *config) {
     
     return 0;
 }
+
+void servo_set_max_speed(Servo *servo, float max_speed_us_per_sec) {
+    if (!servo) return;
+    
+    pthread_mutex_lock(&servo->mutex);
+    servo->config.max_speed_us_per_sec = max_speed_us_per_sec;
+    pthread_mutex_unlock(&servo->mutex);
+}
+
+void servo_set_max_acceleration(Servo *servo, float max_accel_us_per_sec2) {
+    if (!servo) return;
+    
+    pthread_mutex_lock(&servo->mutex);
+    servo->config.max_accel_us_per_sec2 = max_accel_us_per_sec2;
+    pthread_mutex_unlock(&servo->mutex);
+}
