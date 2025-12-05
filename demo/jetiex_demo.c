@@ -111,11 +111,11 @@ int main(int argc, char *argv[]) {
     printf("\n");
     
     // Add sensors
-    JetiEXSensor gun_rate = jetiex_sensor_index(0, "Gun Rate");
-    jetiex_add_sensor(jetiex, &gun_rate);
+    JetiEXSensor gun_rate_sensor = jetiex_sensor_index(0, "Gun Rate");
+    jetiex_add_sensor(jetiex, &gun_rate_sensor);
     
-    JetiEXSensor engine_state = jetiex_sensor_index(1, "Engine State");
-    jetiex_add_sensor(jetiex, &engine_state);
+    JetiEXSensor engine_state_sensor = jetiex_sensor_index(1, "Engine State");
+    jetiex_add_sensor(jetiex, &engine_state_sensor);
     
     JetiEXSensor ammo = jetiex_sensor_percentage(2, "Ammunition");
     jetiex_add_sensor(jetiex, &ammo);
