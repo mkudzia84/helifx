@@ -54,6 +54,13 @@ int gun_fx_set_rates_of_fire(GunFX *gun, const RateOfFire *rates, int count);
 int gun_fx_get_current_rpm(GunFX *gun);
 
 /**
+ * Get current selected rate index
+ * @param gun GunFX handle
+ * @return Selected rate index (0-based), or -1 if no rate selected
+ */
+int gun_fx_get_current_rate_index(GunFX *gun);
+
+/**
  * Check if gun is currently firing
  * @param gun GunFX handle
  * @return true if firing, false otherwise

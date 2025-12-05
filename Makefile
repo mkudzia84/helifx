@@ -15,7 +15,7 @@ SCRIPTS_DIR = scripts
 HELIFX = $(BUILD_DIR)/helifx
 DEMO_TARGETS = $(BUILD_DIR)/mixer_demo $(BUILD_DIR)/gpio_demo \
                $(BUILD_DIR)/engine_fx_demo $(BUILD_DIR)/gun_fx_demo \
-               $(BUILD_DIR)/servo_demo
+               $(BUILD_DIR)/servo_demo $(BUILD_DIR)/jetiex_demo
 
 # All targets
 TARGETS = $(HELIFX) $(DEMO_TARGETS)
@@ -24,7 +24,8 @@ TARGETS = $(HELIFX) $(DEMO_TARGETS)
 HELIFX_SRCS = $(SRC_DIR)/main.c $(SRC_DIR)/config_loader.c \
               $(SRC_DIR)/engine_fx.c $(SRC_DIR)/gun_fx.c \
               $(SRC_DIR)/lights.c $(SRC_DIR)/smoke_generator.c \
-              $(SRC_DIR)/audio_player.c $(SRC_DIR)/gpio.c $(SRC_DIR)/servo.c
+              $(SRC_DIR)/audio_player.c $(SRC_DIR)/gpio.c $(SRC_DIR)/servo.c \
+              $(SRC_DIR)/jetiex.c
 
 MIXER_DEMO_SRCS = $(DEMO_DIR)/mixer_demo.c $(SRC_DIR)/audio_player.c $(SRC_DIR)/gpio.c
 GPIO_DEMO_SRCS = $(DEMO_DIR)/gpio_demo.c $(SRC_DIR)/gpio.c
@@ -34,6 +35,7 @@ GUN_FX_DEMO_SRCS = $(DEMO_DIR)/gun_fx_demo.c $(SRC_DIR)/gun_fx.c \
                    $(SRC_DIR)/lights.c $(SRC_DIR)/smoke_generator.c \
                    $(SRC_DIR)/audio_player.c $(SRC_DIR)/gpio.c $(SRC_DIR)/servo.c
 SERVO_DEMO_SRCS = $(DEMO_DIR)/servo_demo.c $(SRC_DIR)/servo.c
+JETIEX_DEMO_SRCS = $(DEMO_DIR)/jetiex_demo.c $(SRC_DIR)/jetiex.c
 
 # Object files
 HELIFX_OBJS = $(HELIFX_SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o)
@@ -45,6 +47,7 @@ GUN_FX_DEMO_OBJS = $(BUILD_DIR)/demo/gun_fx_demo.o $(BUILD_DIR)/gun_fx.o \
                    $(BUILD_DIR)/lights.o $(BUILD_DIR)/smoke_generator.o \
                    $(BUILD_DIR)/audio_player.o $(BUILD_DIR)/gpio.o $(BUILD_DIR)/servo.o
 SERVO_DEMO_OBJS = $(BUILD_DIR)/demo/servo_demo.o $(BUILD_DIR)/servo.o
+JETIEX_DEMO_OBJS = $(BUILD_DIR)/demo/jetiex_demo.o $(BUILD_DIR)/jetiex.o
 
 # Default target
 .PHONY: all
@@ -83,6 +86,9 @@ $(BUILD_DIR)/gun_fx_demo: $(BUILD_DIR) $(GUN_FX_DEMO_OBJS)
 $(BUILD_DIR)/servo_demo: $(BUILD_DIR) $(SERVO_DEMO_OBJS)
 	$(CC) $(CFLAGS) -o $@ $(SERVO_DEMO_OBJS) $(LIBS)
 
+$(BUILD_DIR)/jetiex_demo: $(BUILD_DIR) $(JETIEX_DEMO_OBJS)
+	$(CC) $(CFLAGS) -o $@ $(JETIEX_DEMO_OBJS) $(LIBS)
+
 # Compile source files
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
 	@mkdir -p $(dir $@)
@@ -117,6 +123,8 @@ $(BUILD_DIR)/smoke_generator.o: $(INCLUDE_DIR)/smoke_generator.h $(INCLUDE_DIR)/
 
 $(BUILD_DIR)/servo.o: $(INCLUDE_DIR)/servo.h
 
+$(BUILD_DIR)/jetiex.o: $(INCLUDE_DIR)/jetiex.h
+
 # Clean build artifacts
 .PHONY: clean
 clean:
@@ -132,6 +140,8 @@ install: all
 	sudo install -m 755 $(BUILD_DIR)/gpio_demo /usr/local/bin/
 	sudo install -m 755 $(BUILD_DIR)/engine_fx_demo /usr/local/bin/
 	sudo install -m 755 $(BUILD_DIR)/gun_fx_demo /usr/local/bin/
+	sudo install -m 755 $(BUILD_DIR)/servo_demo /usr/local/bin/
+	sudo install -m 755 $(BUILD_DIR)/jetiex_demo /usr/local/bin/
 	@echo "Installation complete"
 
 # Install systemd service
@@ -151,6 +161,8 @@ uninstall:
 	sudo rm -f /usr/local/bin/gpio_demo
 	sudo rm -f /usr/local/bin/engine_fx_demo
 	sudo rm -f /usr/local/bin/gun_fx_demo
+	sudo rm -f /usr/local/bin/servo_demo
+	sudo rm -f /usr/local/bin/jetiex_demo
 	@echo "Uninstallation complete"
 
 # Help target

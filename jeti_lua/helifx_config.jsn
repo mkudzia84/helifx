@@ -1,0 +1,30 @@
+{
+  "name": "HeliFX Config",
+  "author": "HeliFX Project",
+  "version": "1.0",
+  "date": "2025-12-05",
+  "description": "Remote configuration for HeliFX helicopter effects system via JetiEX telemetry",
+  "locale": "en",
+  "options": [
+    {
+      "label": "Gun Rate Sensor",
+      "type": "sensor",
+      "default": 0,
+      "help": "Select Gun Rate Index telemetry sensor (0=Low, 1=Med, 2=High)"
+    },
+    {
+      "label": "Engine State Sensor",
+      "type": "sensor",
+      "default": 0,
+      "help": "Select Engine State telemetry sensor (0=STOPPED, 1=STARTING, 2=RUNNING, 3=STOPPING)"
+    },
+    {
+      "label": "Device ID",
+      "type": "number",
+      "default": 42505,
+      "min": 0,
+      "max": 65535,
+      "help": "HeliFX manufacturer ID (0xA409 = 42505)"
+    }
+  ]
+}

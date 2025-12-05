@@ -543,6 +543,16 @@ int gun_fx_get_current_rpm(GunFX *gun) {
     return rpm;
 }
 
+int gun_fx_get_current_rate_index(GunFX *gun) {
+    if (!gun) return -1;
+    
+    pthread_mutex_lock(&gun->mutex);
+    int rate = gun->current_rate;
+    pthread_mutex_unlock(&gun->mutex);
+    
+    return rate;
+}
+
 bool gun_fx_is_firing(GunFX *gun) {
     if (!gun) return false;
     

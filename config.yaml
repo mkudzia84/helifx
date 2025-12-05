@@ -123,3 +123,42 @@ gun_fx:
 # - Sounds loop continuously while in their respective states
 # - Smoke fan continues running for fan_off_delay_ms after firing stops
 # - Smoke heater can be controlled independently via PWM toggle input
+
+# JetiEX Telemetry Configuration
+jetiex:
+  enabled: false               # Enable JetiEX telemetry
+  serial_port: "/dev/ttyAMA0"  # Serial port for telemetry (UART)
+  baud_rate: 115200            # Baud rate (9600, 19200, 38400, 57600, 115200, 230400)
+  manufacturer_id: 0xA409      # Manufacturer ID (16-bit hex)
+  device_id: 0x0001            # Device ID (16-bit hex)
+  update_rate_hz: 10           # Telemetry update rate (5-100 Hz)
+  text_messages: true          # Enable text messages to transmitter
+  
+  # Sensors to transmit
+  sensors:
+    gun_rpm:
+      enabled: true            # Gun firing rate in RPM
+      sensor_id: 0             # Sensor ID (0-15)
+      label: "Gun RPM"         # Display label on transmitter
+    
+    engine_rpm:
+      enabled: false           # Engine RPM (if available)
+      sensor_id: 1
+      label: "Engine RPM"
+    
+    battery_voltage:
+      enabled: false           # Battery voltage monitoring
+      sensor_id: 2
+      label: "Battery"
+      precision: 1             # Decimal places (0-2)
+    
+    temperature:
+      enabled: false           # System temperature
+      sensor_id: 3
+      label: "Temperature"
+      precision: 0
+    
+    ammunition:
+      enabled: false           # Simulated ammunition level
+      sensor_id: 4
+      label: "Ammunition"

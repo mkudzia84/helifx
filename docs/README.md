@@ -19,6 +19,12 @@ Integrated sound and effects system for Kamov KA-50 helicopter RC model, featuri
 - **Independent smoke heater toggle** via PWM input
 - **Turret servo control** with smooth motion limits (pitch and yaw axes)
 
+### Telemetry
+- **JetiEX protocol support** for real-time telemetry transmission
+- **Configurable sensors**: Gun RPM, engine RPM, voltage, temperature, etc.
+- **Text messages** to transmitter display
+- **UART-based communication** to Jeti receivers
+
 ### Audio System
 - Multi-channel audio mixer (8 channels)
 - Simultaneous playback of engine and gun sounds
@@ -487,6 +493,7 @@ This will:
 Additional documentation available:
 - [Wiring Guide](WIRING.md) - Complete wiring diagrams and hardware setup
 - [Logging System](LOGGING.md) - Logging architecture and usage guide
+- [JetiEX Telemetry](JETIEX.md) - Telemetry integration and configuration
 
 ## License
 
