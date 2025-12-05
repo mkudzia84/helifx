@@ -70,7 +70,7 @@ gun_fx:
   # Turret Control Servos
   turret_control:
     pitch:
-      enabled: false           # Enable pitch axis servo control
+      enabled: true            # Enable pitch axis servo control
       pwm_pin: 13              # GPIO 13 (physical pin 33) - INPUT GROUP
       output_pin: 7            # GPIO 7 (physical pin 26) - SERVO OUTPUT GROUP
       input_min_us: 1000       # Minimum input PWM pulse width (µs)
@@ -82,7 +82,7 @@ gun_fx:
       update_rate_hz: 50       # Servo update rate (Hz)
     
     yaw:
-      enabled: false           # Enable yaw axis servo control
+      enabled: true            # Enable yaw axis servo control
       pwm_pin: 16              # GPIO 16 (physical pin 36) - INPUT GROUP
       output_pin: 8            # GPIO 8 (physical pin 24) - SERVO OUTPUT GROUP
       input_min_us: 1000       # Minimum input PWM pulse width (µs)
