@@ -27,9 +27,13 @@ The system uses a Raspberry Pi with WM8960 Audio HAT for audio output and GPIO p
 | Engine Toggle PWM | 17 | Input | RC receiver channel for throttle |
 | Gun Trigger PWM | 27 | Input | RC receiver channel for gun trigger |
 | Smoke Heater Toggle PWM | 22 | Input | RC receiver channel for smoke heater |
+| Pitch Servo PWM Input | 13 | Input | RC receiver channel for pitch control |
+| Yaw Servo PWM Input | 16 | Input | RC receiver channel for yaw control |
 | Nozzle Flash LED | 23 | Output | LED control (active high) |
 | Smoke Fan Control | 24 | Output | Controls MOSFET for smoke fan |
 | Smoke Heater Control | 25 | Output | Controls MOSFET for smoke heater |
+| Pitch Servo PWM Output | 7 | Output | PWM to pitch servo |
+| Yaw Servo PWM Output | 8 | Output | PWM to yaw servo |
 
 ### Reserved Pins (WM8960 Audio HAT)
 
@@ -207,6 +211,79 @@ Heater Module GND -------------->  Smoke Heater (-)
 - P = V² / R
 - Example: 12V with 6Ω heater = 24W, 2A current
 - Ensure power supply can handle total current (fan + heater)
+
+## Servo Wiring
+
+### Turret Control Servos
+
+The system supports two servo axes for turret control: pitch (elevation) and yaw (rotation). Each servo requires:
+1. **PWM input** from RC receiver (monitored by GPIO)
+2. **PWM output** to the servo motor
+
+**Input Stage (RC Receiver → Raspberry Pi):**
+```
+RC Receiver                    Raspberry Pi
+-----------                    -----------
+
+Pitch Channel (CH3)
+   Signal  ------------------>  GPIO 13 (Pin 33)
+   GND     ------------------>  GND (shared)
+
+Yaw Channel (CH4)
+   Signal  ------------------>  GPIO 16 (Pin 36)
+   GND     ------------------>  GND (shared)
+```
+
+**Output Stage (Raspberry Pi → Servos):**
+```
+Raspberry Pi                   Servo Motor
+------------                  -----------
+
+GPIO 7 (Pin 26) ----[PWM]----->  Signal (white/yellow)
+3.3V (Pin 1) ---[optional]----->  Power (red) - if servo is 3.3V
+                                 [OR use external 5V supply]
+
+GND (Pin 9) --------[GND]----->  Ground (black/brown)
+```
+
+**Note:** Most RC servos require 5V power. Options:
+- **Option 1:** Use external 5V supply for servo power
+- **Option 2:** Use servo voltage reducer (7.5V to 5V)
+- **Option 3:** Use low-torque servos rated for 3.3V (not recommended)
+
+### Servo Specifications
+
+| Parameter | Value | Notes |
+|-----------|-------|-------|
+| Control Type | PWM | 1000-2000µs pulse width |
+| Update Rate | 50 Hz | Servo refresh rate |
+| Max Speed | 500 µs/sec | Configurable via config.yaml |
+| Max Accel | 2000 µs/sec² | Configurable via config.yaml |
+| Voltage | 5V or higher | Depends on servo model |
+| Current | 100-500mA per servo | At stall |
+
+### Multi-Servo Power Supply
+
+For two servos with external power:
+```
+5V Power Supply              Servo 1         Servo 2
+---------------              -------         -------
+
+(+) 5V ----+---[PWM]------->  Signal      
+           |                 Power(+)
+           +---[PWM]------->  Signal      
+           |                 Power(+)
+           |                 (common to both)
+           
+(-) GND ----+---[GND]------->  GND
+           |                 
+           +---[GND]------->  GND
+```
+
+**Recommended Power Supply:**
+- **Voltage:** 5V DC
+- **Current:** Minimum 1A (2A recommended for two servos under load)
+- **Type:** Regulated DC power supply
 
 ## Audio HAT Connections
 

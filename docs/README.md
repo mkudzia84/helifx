@@ -17,6 +17,7 @@ Integrated sound and effects system for Kamov KA-50 helicopter RC model, featuri
 - **Looping gun sounds** for each rate of fire
 - **Smoke generator control** with configurable fan-off delay
 - **Independent smoke heater toggle** via PWM input
+- **Turret servo control** with smooth motion limits (pitch and yaw axes)
 
 ### Audio System
 - Multi-channel audio mixer (8 channels)
@@ -52,6 +53,10 @@ See [WIRING.md](WIRING.md) for complete wiring diagrams and pin assignments.
 - **Nozzle Flash LED:** GPIO 23
 - **Smoke Fan Control:** GPIO 24
 - **Smoke Heater Control:** GPIO 25
+- **Pitch Servo PWM Input:** GPIO 13
+- **Pitch Servo PWM Output:** GPIO 7
+- **Yaw Servo PWM Input:** GPIO 16
+- **Yaw Servo PWM Output:** GPIO 8
 
 **Reserved Pins (WM8960 Audio HAT):**
 - GPIO 2, 3: I2C (SCL, SDA)
@@ -207,6 +212,32 @@ gun_fx:
     heater_pwm_threshold_us: 1500
     fan_off_delay_ms: 2000
   
+  # Turret Control Servos
+  turret_control:
+    pitch:
+      enabled: true           # Enable pitch axis servo control
+      pwm_pin: 13             # GPIO 13 - PWM input from RC receiver
+      output_pin: 7           # GPIO 7 - PWM output to servo
+      input_min_us: 1000      # Minimum input PWM pulse width (µs)
+      input_max_us: 2000      # Maximum input PWM pulse width (µs)
+      output_min_us: 1000     # Minimum output PWM pulse width (µs)
+      output_max_us: 2000     # Maximum output PWM pulse width (µs)
+      max_speed_us_per_sec: 500.0      # Maximum servo speed
+      max_accel_us_per_sec2: 2000.0    # Maximum servo acceleration
+      update_rate_hz: 50      # Servo update rate (Hz)
+    
+    yaw:
+      enabled: true           # Enable yaw axis servo control
+      pwm_pin: 16             # GPIO 16 - PWM input from RC receiver
+      output_pin: 8           # GPIO 8 - PWM output to servo
+      input_min_us: 1000      # Minimum input PWM pulse width (µs)
+      input_max_us: 2000      # Maximum input PWM pulse width (µs)
+      output_min_us: 1000     # Minimum output PWM pulse width (µs)
+      output_max_us: 2000     # Maximum output PWM pulse width (µs)
+      max_speed_us_per_sec: 500.0      # Maximum servo speed
+      max_accel_us_per_sec2: 2000.0    # Maximum servo acceleration
+      update_rate_hz: 50      # Servo update rate (Hz)
+  
   rate_of_fire:
     - name: "200"
       rpm: 200
@@ -279,10 +310,15 @@ Press `Ctrl+C` to stop.
 
 ### Monitoring
 
-Check system status every 5 seconds (logged to journal):
+Check system status every 10 seconds (logged to journal). Example output:
 ```
-[GUN STATUS] Firing: YES | Rate: 2 | RPM: 550 | PWM: 1650 µs | Heater: ON
+[GUN STATUS @ 10.2s] Firing: YES | Rate: 2 | RPM: 550 | Trigger PWM: 1650 µs | Heater: ON
+[GUN SERVOS] Pitch: 1500 µs | Yaw: 1600 µs | Pitch Servo: ACTIVE | Yaw Servo: ACTIVE
 ```
+
+The status dump includes:
+- **Gun Status:** Firing state, selected rate, RPM, trigger PWM width, heater status
+- **Servo Status:** Pitch/yaw input PWM readings and servo active/disabled state
 
 View logs:
 ```bash
