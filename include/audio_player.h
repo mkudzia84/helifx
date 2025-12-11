@@ -123,4 +123,62 @@ bool audio_mixer_is_playing(AudioMixer *mixer);
  */
 bool audio_mixer_is_channel_playing(AudioMixer *mixer, int channel_id);
 
+// ============================================================================
+// SOUND MANAGER API - For Managing Sound Collections
+// ============================================================================
+
+// Sound identifier enum
+typedef enum {
+    // Engine sounds
+    SOUND_ENGINE_STARTING = 0,
+    SOUND_ENGINE_RUNNING,
+    SOUND_ENGINE_STOPPING,
+    
+    // Gun sounds
+    SOUND_GUN_RATE_1,
+    SOUND_GUN_RATE_2,
+    SOUND_GUN_RATE_3,
+    SOUND_GUN_RATE_4,
+    SOUND_GUN_RATE_5,
+    SOUND_GUN_RATE_6,
+    SOUND_GUN_RATE_7,
+    SOUND_GUN_RATE_8,
+    SOUND_GUN_RATE_9,
+    SOUND_GUN_RATE_10,
+    
+    SOUND_ID_COUNT
+} SoundID;
+
+// Sound manager
+typedef struct SoundManager SoundManager;
+
+/**
+ * Create a new sound manager
+ * @return SoundManager handle or NULL on error
+ */
+SoundManager* sound_manager_create(void);
+
+/**
+ * Destroy sound manager and all loaded sounds
+ * @param manager SoundManager handle
+ */
+void sound_manager_destroy(SoundManager *manager);
+
+/**
+ * Load a sound
+ * @param manager SoundManager handle
+ * @param id Sound identifier
+ * @param filename Path to audio file (can be NULL to skip loading)
+ * @return 0 on success, -1 on error
+ */
+int sound_manager_load_sound(SoundManager *manager, SoundID id, const char *filename);
+
+/**
+ * Get a sound
+ * @param manager SoundManager handle
+ * @param id Sound identifier
+ * @return Sound handle or NULL if not loaded
+ */
+Sound* sound_manager_get_sound(SoundManager *manager, SoundID id);
+
 #endif // AUDIO_PLAYER_H

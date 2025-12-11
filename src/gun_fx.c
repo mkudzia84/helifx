@@ -121,14 +121,28 @@ static void* gun_fx_processing_thread(void *arg) {
     
     while (gun->processing_running) {
         // Update servos from PWM inputs
-        if (gun->pitch_servo && gun->pitch_pwm_monitor && 
-            pwm_monitor_get_reading(gun->pitch_pwm_monitor, &pitch_reading)) {
-            servo_set_input(gun->pitch_servo, pitch_reading.duration_us);
+        if (gun->pitch_servo && gun->pitch_pwm_monitor) {
+            if (pwm_monitor_get_reading(gun->pitch_pwm_monitor, &pitch_reading)) {
+                servo_set_input(gun->pitch_servo, pitch_reading.duration_us);
+            } else {
+                static int pitch_warn_count = 0;
+                if (pitch_warn_count < 5) {
+                    LOG_WARN(LOG_GUN, "No PWM reading from pitch servo input (GPIO %d)", gun->pitch_pwm_pin);
+                    pitch_warn_count++;
+                }
+            }
         }
         
-        if (gun->yaw_servo && gun->yaw_pwm_monitor && 
-            pwm_monitor_get_reading(gun->yaw_pwm_monitor, &yaw_reading)) {
-            servo_set_input(gun->yaw_servo, yaw_reading.duration_us);
+        if (gun->yaw_servo && gun->yaw_pwm_monitor) {
+            if (pwm_monitor_get_reading(gun->yaw_pwm_monitor, &yaw_reading)) {
+                servo_set_input(gun->yaw_servo, yaw_reading.duration_us);
+            } else {
+                static int yaw_warn_count = 0;
+                if (yaw_warn_count < 5) {
+                    LOG_WARN(LOG_GUN, "No PWM reading from yaw servo input (GPIO %d)", gun->yaw_pwm_pin);
+                    yaw_warn_count++;
+                }
+            }
         }
         
         // Get current rate index

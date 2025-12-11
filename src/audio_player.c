@@ -430,3 +430,66 @@ int audio_mixer_stop_looping(AudioMixer *mixer, int channel_id) {
     pthread_mutex_unlock(&mixer->mixer_mutex);
     return 0;
 }
+
+// ============================================================================
+// SOUND MANAGER IMPLEMENTATION - For Managing Sound Collections
+// ============================================================================
+
+struct SoundManager {
+    Sound *sounds[SOUND_ID_COUNT];
+};
+
+SoundManager* sound_manager_create(void) {
+    SoundManager *manager = (SoundManager*)calloc(1, sizeof(SoundManager));
+    if (!manager) {
+        fprintf(stderr, "[AUDIO] Error: Cannot allocate memory for sound manager\n");
+        return NULL;
+    }
+    
+    printf("[AUDIO] Sound manager created\n");
+    return manager;
+}
+
+void sound_manager_destroy(SoundManager *manager) {
+    if (!manager) return;
+    
+    // Destroy all sounds
+    for (int i = 0; i < SOUND_ID_COUNT; i++) {
+        if (manager->sounds[i]) {
+            sound_destroy(manager->sounds[i]);
+            manager->sounds[i] = NULL;
+        }
+    }
+    
+    free(manager);
+    printf("[AUDIO] Sound manager destroyed\n");
+}
+
+int sound_manager_load_sound(SoundManager *manager, SoundID id, const char *filename) {
+    if (!manager) return -1;
+    if (id < 0 || id >= SOUND_ID_COUNT) return -1;
+    
+    // Skip if filename is NULL
+    if (!filename) return 0;
+    
+    // Destroy existing sound if any
+    if (manager->sounds[id]) {
+        sound_destroy(manager->sounds[id]);
+        manager->sounds[id] = NULL;
+    }
+    
+    // Load new sound
+    manager->sounds[id] = sound_load(filename);
+    if (!manager->sounds[id]) {
+        fprintf(stderr, "[AUDIO] Failed to load sound %d from %s\n", id, filename);
+        return -1;
+    }
+    
+    return 0;
+}
+
+Sound* sound_manager_get_sound(SoundManager *manager, SoundID id) {
+    if (!manager) return NULL;
+    if (id < 0 || id >= SOUND_ID_COUNT) return NULL;
+    return manager->sounds[id];
+}

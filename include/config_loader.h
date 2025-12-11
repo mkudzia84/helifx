@@ -3,13 +3,14 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <cyaml/cyaml.h>
 
 // Rate of fire configuration
 typedef struct RateOfFireConfig {
-    char name[64];
+    char *name;
     int rpm;
     int pwm_threshold_us;
-    char sound_file[512];
+    char *sound_file;
 } RateOfFireConfig;
 
 // Servo configuration
@@ -31,9 +32,9 @@ typedef struct EngineFXConfig {
     bool enabled;
     int pin;
     int threshold_us;
-    char starting_file[512];
-    char running_file[512];
-    char stopping_file[512];
+    char *starting_file;
+    char *running_file;
+    char *stopping_file;
     int starting_offset_ms;
     int stopping_offset_ms;
 } EngineFXConfig;
@@ -65,7 +66,7 @@ typedef struct GunFXConfig {
 typedef struct JetiEXConfigData {
     bool enabled;
     bool remote_config;
-    char serial_port[256];
+    char *serial_port;
     uint32_t baud_rate;
     uint16_t manufacturer_id;
     uint16_t device_id;
@@ -83,12 +84,11 @@ typedef struct HeliFXConfig {
 } HeliFXConfig;
 
 /**
- * Load and parse YAML configuration file
+ * Load and parse YAML configuration file using libcyaml
  * @param config_file Path to YAML configuration file
- * @param config Output configuration structure
- * @return 0 on success, -1 on error
+ * @return Pointer to loaded configuration, or NULL on error
  */
-int config_load(const char *config_file, HeliFXConfig *config);
+HeliFXConfig* config_load(const char *config_file);
 
 /**
  * Validate configuration
@@ -104,7 +104,7 @@ int config_validate(const HeliFXConfig *config);
 void config_print(const HeliFXConfig *config);
 
 /**
- * Free dynamically allocated configuration memory
+ * Free configuration memory (uses cyaml_free)
  * @param config Configuration to free
  */
 void config_free(HeliFXConfig *config);

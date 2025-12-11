@@ -379,12 +379,22 @@ struct PWMMonitor {
 static void* pwm_monitor_thread(void *arg) {
     PWMMonitor *monitor = (PWMMonitor *)arg;
     
-    printf("[GPIO] PWM monitor thread started for pin %d\n", monitor->pin);
+    printf("[GPIO] PWM monitor thread started for pin %d (timeout: %d µs)\n", 
+           monitor->pin, monitor->timeout_us);
+    
+    int timeout_count = 0;
+    bool first_signal_received = false;
     
     while (monitor->running) {
         int duration = gpio_read_pwm_duration(monitor->pin, monitor->timeout_us);
         
         if (duration > 0) {
+            if (!first_signal_received) {
+                printf("[GPIO] First PWM signal received on pin %d: %d µs\n", 
+                       monitor->pin, duration);
+                first_signal_received = true;
+            }
+            
             PWMReading reading;
             reading.pin = monitor->pin;
             reading.duration_us = duration;
@@ -404,8 +414,15 @@ static void* pwm_monitor_thread(void *arg) {
             if (monitor->callback) {
                 monitor->callback(reading, monitor->user_data);
             }
+            
+            timeout_count = 0; // Reset timeout counter on successful read
         } else if (duration == -1) {
             // Timeout or error, continue monitoring
+            timeout_count++;
+            if (timeout_count == 10 && !first_signal_received) {
+                printf("[GPIO] Warning: No PWM signal detected on pin %d after 10 attempts\n", 
+                       monitor->pin);
+            }
             usleep(1000); // Small delay to prevent busy loop
         }
     }
