@@ -71,6 +71,7 @@ all: $(TARGETS)
 # Usage: make ENABLE_JETIEX=0
 .PHONY: nojetiex
 nojetiex:
+	$(MAKE) clean
 	$(MAKE) ENABLE_JETIEX=0
 
 # Demo target
