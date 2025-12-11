@@ -104,11 +104,19 @@ static const cyaml_schema_field_t trigger_fields[] = {
     CYAML_FIELD_END
 };
 
+// Engine sounds transitions mapping
+static const cyaml_schema_field_t engine_transitions_fields[] = {
+    CYAML_FIELD_INT("starting_offset_ms", CYAML_FLAG_DEFAULT | CYAML_FLAG_OPTIONAL, EngineFXConfig, starting_offset_ms),
+    CYAML_FIELD_INT("stopping_offset_ms", CYAML_FLAG_DEFAULT | CYAML_FLAG_OPTIONAL, EngineFXConfig, stopping_offset_ms),
+    CYAML_FIELD_END
+};
+
 // Engine sounds mapping
 static const cyaml_schema_field_t engine_sounds_fields[] = {
     CYAML_FIELD_STRING_PTR("starting", CYAML_FLAG_POINTER | CYAML_FLAG_OPTIONAL, EngineFXConfig, starting_file, 0, CYAML_UNLIMITED),
     CYAML_FIELD_STRING_PTR("running", CYAML_FLAG_POINTER | CYAML_FLAG_OPTIONAL, EngineFXConfig, running_file, 0, CYAML_UNLIMITED),
     CYAML_FIELD_STRING_PTR("stopping", CYAML_FLAG_POINTER | CYAML_FLAG_OPTIONAL, EngineFXConfig, stopping_file, 0, CYAML_UNLIMITED),
+    CYAML_FIELD_MAPPING("transitions", CYAML_FLAG_DEFAULT | CYAML_FLAG_OPTIONAL, EngineFXConfig, starting_offset_ms, engine_transitions_fields),
     CYAML_FIELD_END
 };
 
@@ -124,8 +132,6 @@ static const cyaml_schema_field_t engine_fx_fields[] = {
     CYAML_FIELD_BOOL("enabled", CYAML_FLAG_DEFAULT, EngineFXConfig, enabled),
     CYAML_FIELD_MAPPING("engine_toggle", CYAML_FLAG_DEFAULT, EngineFXConfig, pin, engine_toggle_fields),
     CYAML_FIELD_MAPPING("sounds", CYAML_FLAG_DEFAULT, EngineFXConfig, starting_file, engine_sounds_fields),
-    CYAML_FIELD_INT("starting_offset_ms", CYAML_FLAG_DEFAULT | CYAML_FLAG_OPTIONAL, EngineFXConfig, starting_offset_ms),
-    CYAML_FIELD_INT("stopping_offset_ms", CYAML_FLAG_DEFAULT | CYAML_FLAG_OPTIONAL, EngineFXConfig, stopping_offset_ms),
     CYAML_FIELD_END
 };
 

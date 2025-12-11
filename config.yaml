@@ -19,12 +19,9 @@ engine_fx:
   
   # Sound Files and Transitions
   sounds:
-    starting:
-      file: "~/assets/engine_start.wav"    # Engine start-up sound (optional)
-    running:
-      file: "~/assets/engine_loop.wav"     # Engine running loop sound (optional)
-    stopping:
-      file: "~/assets/engine_stop.wav"     # Engine shut-down sound (optional)
+    starting: "~/assets/engine_start.wav"    # Engine start-up sound (optional)
+    running: "~/assets/engine_loop.wav"      # Engine running loop sound (optional)
+    stopping: "~/assets/engine_stop.wav"     # Engine shut-down sound (optional)
     
     # Transition Offsets
     transitions:
@@ -56,16 +53,16 @@ gun_fx:
   # Rates of Fire
   # Each rate defines RPM, PWM threshold, and associated sound
   # Rates should be ordered from lowest to highest threshold for optimal performance
-  rate_of_fire:
+  rates_of_fire:
     - name: "200"
       rpm: 200                 # Rounds per minute
       pwm_threshold_us: 1400   # PWM threshold in microseconds
-      sound: "~/assets/gun_200rpm.wav"  # Sound file to play (optional)
+      sound_file: "~/assets/gun_200rpm.wav"  # Sound file to play (optional)
     
     - name: "550"
       rpm: 550                 # Rounds per minute
       pwm_threshold_us: 1600   # PWM threshold in microseconds
-      sound: "~/assets/gun_550rpm.wav"  # Sound file to play (optional)
+      sound_file: "~/assets/gun_550rpm.wav"  # Sound file to play (optional)
   
   # Turret Control Servos
   turret_control:
