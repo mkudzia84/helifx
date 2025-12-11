@@ -203,7 +203,7 @@ static const cyaml_schema_value_t helifx_config_schema = {
 static const cyaml_config_t cyaml_config = {
     .log_fn = cyaml_log,
     .mem_fn = cyaml_mem,
-    .log_level = CYAML_LOG_WARNING,
+    .log_level = CYAML_LOG_DEBUG,  // Increased for detailed error messages
 };
 
 /* ============================================================================

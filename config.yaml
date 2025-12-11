@@ -130,20 +130,3 @@ jetiex:
   manufacturer_id: 0xA409      # Manufacturer ID (16-bit hex)
   device_id: 0x0001            # Device ID (16-bit hex)
   update_rate_hz: 10           # Telemetry update rate (5-100 Hz)
-    
-    battery_voltage:
-      enabled: false           # Battery voltage monitoring
-      sensor_id: 2
-      label: "Battery"
-      precision: 1             # Decimal places (0-2)
-    
-    temperature:
-      enabled: false           # System temperature
-      sensor_id: 3
-      label: "Temperature"
-      precision: 0
-    
-    ammunition:
-      enabled: false           # Simulated ammunition level
-      sensor_id: 4
-      label: "Ammunition"
