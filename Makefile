@@ -1,6 +1,6 @@
 # Compiler settings
 CC = gcc
-CFLAGS = -Wall -Wextra -Werror -Wno-unused-function -std=c23 -O2 -D_DEFAULT_SOURCE
+CFLAGS = -Wall -Wextra -Werror -Wno-unused-function -std=c23 -D_DEFAULT_SOURCE
 INCLUDES = -I./include
 # Note: libcyaml depends on libyaml, so both are required
 LIBS = -ldl -lm -latomic -lcyaml -lyaml
@@ -8,6 +8,14 @@ LIBS = -ldl -lm -latomic -lcyaml -lyaml
 # Build options
 # Set to 0 to disable JetiEX telemetry support
 ENABLE_JETIEX ?= 1
+
+# Debug build: make DEBUG=1
+DEBUG ?= 0
+ifeq ($(DEBUG),1)
+CFLAGS += -g -O0 -DDEBUG
+else
+CFLAGS += -O2
+endif
 
 # Directories
 SRC_DIR = src
