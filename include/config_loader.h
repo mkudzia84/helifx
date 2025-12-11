@@ -61,8 +61,8 @@ typedef struct GunFXConfig {
     int rate_count;
 } GunFXConfig;
 
-#ifdef ENABLE_JETIEX
 // JetiEX telemetry configuration with defaults
+// Always included in struct, but only used when ENABLE_JETIEX is defined
 typedef struct JetiEXConfigData {
     bool enabled;
     bool remote_config;
@@ -72,15 +72,12 @@ typedef struct JetiEXConfigData {
     uint16_t device_id;
     uint8_t update_rate_hz;  // Default: 5
 } JetiEXConfigData;
-#endif
 
 // Complete helicopter FX configuration
 typedef struct HeliFXConfig {
     EngineFXConfig engine;
     GunFXConfig gun;
-#ifdef ENABLE_JETIEX
-    JetiEXConfigData jetiex;
-#endif
+    JetiEXConfigData jetiex;  // Always present, but ignored when ENABLE_JETIEX not defined
 } HeliFXConfig;
 
 /**
