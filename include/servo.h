@@ -27,7 +27,7 @@ typedef struct Servo Servo;
  * smooth motion control based on speed and acceleration limits.
  * 
  * @param config Servo configuration
- * @return Servo instance or NULL on failure
+ * @return Servo instance or nullptr on failure
  */
 Servo* servo_create(const ServoConfig *config);
 

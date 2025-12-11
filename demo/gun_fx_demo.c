@@ -311,7 +311,7 @@ int main(int argc, char *argv[]) {
     }
     
     // Load gun sounds
-    Sound *sounds[2] = {NULL, NULL};
+    Sound *sounds[2] = {nullptr, nullptr};
     for (int i = 0; i < config.rate_count; i++) {
         sounds[i] = sound_load(config.rates[i].sound_file);
         if (!sounds[i]) {

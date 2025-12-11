@@ -1,9 +1,9 @@
 # Compiler settings
 CC = gcc
-CFLAGS = -Wall -Wextra -Werror -Wno-unused-function -std=c11 -pthread -O2 -D_DEFAULT_SOURCE
+CFLAGS = -Wall -Wextra -Werror -Wno-unused-function -std=c23 -O2 -D_DEFAULT_SOURCE
 INCLUDES = -I./include
 # Note: libcyaml depends on libyaml, so both are required
-LIBS = -lpthread -ldl -lm -latomic -lcyaml -lyaml
+LIBS = -ldl -lm -latomic -lcyaml -lyaml
 
 # Build options
 # Set to 0 to disable JetiEX telemetry support

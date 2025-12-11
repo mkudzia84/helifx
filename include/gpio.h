@@ -2,7 +2,7 @@
 #define GPIO_H
 
 #include <stdbool.h>
-#include <pthread.h>
+#include <threads.h>
 
 // Forward declarations
 typedef struct PWMMonitor PWMMonitor;
@@ -118,9 +118,9 @@ int gpio_read_pwm_duration(int pin, int timeout_us);
 /**
  * Create a PWM monitor for asynchronous pulse width monitoring
  * @param pin GPIO pin number to monitor
- * @param callback Callback function called for each pulse (optional, can be NULL)
+ * @param callback Callback function called for each pulse (optional, can be nullptr)
  * @param user_data User data passed to callback
- * @return PWMMonitor handle or NULL on error
+ * @return PWMMonitor handle or nullptr on error
  */
 PWMMonitor* pwm_monitor_create(int pin, PWMCallback callback, void *user_data);
 

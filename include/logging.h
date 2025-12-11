@@ -27,6 +27,7 @@
 #define LOG_AUDIO    "[AUDIO]  "
 #define LOG_SMOKE    "[SMOKE]  "
 #define LOG_GPIO     "[GPIO]   "
+#define LOG_LIGHTS   "[LIGHTS] "
 #define LOG_JETIEX   "[JETIEX] "
 #define LOG_DEMO     "[DEMO]   "
 

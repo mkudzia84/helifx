@@ -16,13 +16,13 @@ struct SmokeGenerator {
 SmokeGenerator* smoke_generator_create(int heater_pin, int fan_pin) {
     if (heater_pin < 0 || fan_pin < 0) {
         LOG_ERROR(LOG_SMOKE, "Invalid pin numbers");
-        return nullptr;
+        return NULL;
     }
     
     SmokeGenerator *smoke = calloc(1, sizeof(SmokeGenerator));
     if (!smoke) {
         LOG_ERROR(LOG_SMOKE, "Cannot allocate memory for smoke generator");
-        return nullptr;
+        return NULL;
     }
     
     smoke->heater_pin = heater_pin;
@@ -36,14 +36,14 @@ SmokeGenerator* smoke_generator_create(int heater_pin, int fan_pin) {
         LOG_ERROR(LOG_SMOKE, "Failed to set heater pin %d as output", heater_pin);
         mtx_destroy(&smoke->mutex);
         free(smoke);
-        return nullptr;
+        return NULL;
     }
     
     if (gpio_set_mode(fan_pin, GPIO_MODE_OUTPUT) < 0) {
         LOG_ERROR(LOG_SMOKE, "Failed to set fan pin %d as output", fan_pin);
         mtx_destroy(&smoke->mutex);
         free(smoke);
-        return nullptr;
+        return NULL;
     }
     
     gpio_write(heater_pin, 0);
@@ -63,7 +63,7 @@ void smoke_generator_destroy(SmokeGenerator *smoke) {
     mtx_destroy(&smoke->mutex);
     free(smoke);
     
-    LOG_INFO(LOG_SMOKE, "Smoke generator destroyed");
+    printf("[SMOKE] Smoke generator destroyed\n");
 }
 
 int smoke_generator_heater_on(SmokeGenerator *smoke) {
@@ -74,7 +74,7 @@ int smoke_generator_heater_on(SmokeGenerator *smoke) {
     mtx_unlock(&smoke->mutex);
     
     gpio_write(smoke->heater_pin, 1);
-    LOG_INFO(LOG_SMOKE, "Heater ON");
+    printf("[SMOKE] Heater ON\n");
     
     return 0;
 }
@@ -87,7 +87,7 @@ int smoke_generator_heater_off(SmokeGenerator *smoke) {
     mtx_unlock(&smoke->mutex);
     
     gpio_write(smoke->heater_pin, 0);
-    LOG_INFO(LOG_SMOKE, "Heater OFF");
+    printf("[SMOKE] Heater OFF\n");
     
     return 0;
 }
@@ -100,7 +100,7 @@ int smoke_generator_fan_on(SmokeGenerator *smoke) {
     mtx_unlock(&smoke->mutex);
     
     gpio_write(smoke->fan_pin, 1);
-    LOG_INFO(LOG_SMOKE, "Fan ON");
+    printf("[SMOKE] Fan ON\n");
     
     return 0;
 }
@@ -113,7 +113,7 @@ int smoke_generator_fan_off(SmokeGenerator *smoke) {
     mtx_unlock(&smoke->mutex);
     
     gpio_write(smoke->fan_pin, 0);
-    LOG_INFO(LOG_SMOKE, "Fan OFF");
+    printf("[SMOKE] Fan OFF\n");
     
     return 0;
 }
@@ -137,4 +137,3 @@ bool smoke_generator_is_fan_on(SmokeGenerator *smoke) {
     
     return on;
 }
-

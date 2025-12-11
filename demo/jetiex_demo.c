@@ -76,9 +76,9 @@ int main(int argc, char *argv[]) {
         } else if (strncmp(argv[i], "--rate=", 7) == 0) {
             config.update_rate_hz = atoi(argv[i] + 7);
         } else if (strncmp(argv[i], "--manufacturer=", 15) == 0) {
-            config.manufacturer_id = strtol(argv[i] + 15, NULL, 16);
+            config.manufacturer_id = strtol(argv[i] + 15, nullptr, 16);
         } else if (strncmp(argv[i], "--device=", 9) == 0) {
-            config.device_id = strtol(argv[i] + 9, NULL, 16);
+            config.device_id = strtol(argv[i] + 9, nullptr, 16);
         } else if (strcmp(argv[i], "--help") == 0) {
             print_usage(argv[0]);
             return 0;
@@ -146,7 +146,7 @@ int main(int argc, char *argv[]) {
     const char *engine_states[] = {"STOPPED", "STARTING", "RUNNING", "STOPPING"};
     const char *gun_rates[] = {"Low", "Medium", "High"};
     
-    srand(time(NULL));
+    srand(time(nullptr));
     
     // Main loop - update sensor values
     while (running) {

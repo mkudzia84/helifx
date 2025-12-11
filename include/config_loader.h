@@ -86,7 +86,7 @@ typedef struct HeliFXConfig {
 /**
  * Load and parse YAML configuration file using libcyaml
  * @param config_file Path to YAML configuration file
- * @return Pointer to loaded configuration, or NULL on error
+ * @return Pointer to loaded configuration, or nullptr on error
  */
 HeliFXConfig* config_load(const char *config_file);
 

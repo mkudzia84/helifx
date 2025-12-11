@@ -5,7 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <pthread.h>
+#include <threads.h>  // C23 standard threads
 
 // ============================================================================
 // SOUND IMPLEMENTATION - For Loading Audio Files
@@ -19,35 +19,35 @@ struct Sound {
 
 Sound* sound_load(const char *filename) {
     if (!filename) {
-        fprintf(stderr, "[AUDIO] Error: Filename is NULL\n");
-        return NULL;
+        LOG_ERROR(LOG_AUDIO, "Filename is nullptr");
+        return nullptr;
     }
     
-    Sound *sound = (Sound*)calloc(1, sizeof(Sound));
+    Sound *sound = calloc(1, sizeof(Sound));
     if (!sound) {
-        fprintf(stderr, "[AUDIO] Error: Cannot allocate memory for sound\n");
-        return NULL;
+        LOG_ERROR(LOG_AUDIO, "Cannot allocate memory for sound");
+        return nullptr;
     }
     
     // Initialize decoder
-    ma_result result = ma_decoder_init_file(filename, NULL, &sound->decoder);
+    ma_result result = ma_decoder_init_file(filename, nullptr, &sound->decoder);
     if (result != MA_SUCCESS) {
-        fprintf(stderr, "[AUDIO] Error: Failed to load audio file: %s\n", filename);
+        LOG_ERROR(LOG_AUDIO, "Failed to load audio file: %s", filename);
         free(sound);
-        return NULL;
+        return nullptr;
     }
     
     sound->filename = strdup(filename);
     if (!sound->filename) {
-        fprintf(stderr, "[AUDIO] Error: Cannot allocate memory for filename\n");
+        LOG_ERROR(LOG_AUDIO, "Cannot allocate memory for filename");
         ma_decoder_uninit(&sound->decoder);
         free(sound);
-        return NULL;
+        return nullptr;
     }
     
     sound->is_loaded = true;
     
-    printf("[AUDIO] Loaded sound: %s\n", filename);
+    LOG_INFO(LOG_AUDIO, "Loaded sound: %s", filename);
     return sound;
 }
 
@@ -72,7 +72,7 @@ struct AudioMixer {
     ma_engine engine;
     ma_sound *sounds[MAX_MIXER_CHANNELS];
     
-    pthread_mutex_t mixer_mutex;
+    mtx_t mixer_mutex;  // C23 standard mutex
     int max_channels;
     
     bool active[MAX_MIXER_CHANNELS];
@@ -85,43 +85,43 @@ struct AudioMixer {
 
 AudioMixer* audio_mixer_create(int max_channels) {
     if (max_channels <= 0 || max_channels > MAX_MIXER_CHANNELS) {
-        fprintf(stderr, "[AUDIO] Error: Invalid channel count (max: %d)\n", MAX_MIXER_CHANNELS);
-        return NULL;
+        LOG_ERROR(LOG_AUDIO, "Invalid channel count (max: %d)", MAX_MIXER_CHANNELS);
+        return nullptr;
     }
     
-    AudioMixer *mixer = (AudioMixer*)calloc(1, sizeof(AudioMixer));
+    AudioMixer *mixer = calloc(1, sizeof(AudioMixer));
     if (!mixer) {
-        fprintf(stderr, "[AUDIO] Error: Cannot allocate memory for audio mixer\n");
-        return NULL;
+        LOG_ERROR(LOG_AUDIO, "Cannot allocate memory for audio mixer");
+        return nullptr;
     }
     
-    // Initialize miniaudio engine with proper channel configuration
+    // Initialize miniaudio engine with proper channel configuration (C23 designated initializer)
     ma_engine_config engineConfig = ma_engine_config_init();
     engineConfig.channels = 2;  // Force stereo output for WM8960
     
     ma_result result = ma_engine_init(&engineConfig, &mixer->engine);
     if (result != MA_SUCCESS) {
-        fprintf(stderr, "[AUDIO] Error: Failed to initialize mixer engine\n");
+        LOG_ERROR(LOG_AUDIO, "Failed to initialize mixer engine");
         free(mixer);
-        return NULL;
+        return nullptr;
     }
     
     mixer->max_channels = max_channels;
     mixer->master_volume = 1.0f;
     mixer->engine_initialized = true;
     
-    pthread_mutex_init(&mixer->mixer_mutex, NULL);
+    mtx_init(&mixer->mixer_mutex, mtx_plain);  // C23 standard mutex initialization
     
     for (int i = 0; i < MAX_MIXER_CHANNELS; i++) {
         mixer->active[i] = false;
         mixer->volume[i] = 1.0f;
-        mixer->sounds[i] = NULL;
+        mixer->sounds[i] = nullptr;
     }
     
     // Set master volume on engine
     ma_engine_set_volume(&mixer->engine, mixer->master_volume);
     
-    printf("Audio mixer created with %d channels\n", max_channels);
+    LOG_INFO(LOG_AUDIO, "Created mixer with %d channels", max_channels);
     return mixer;
 }
 
@@ -131,14 +131,14 @@ void audio_mixer_destroy(AudioMixer *mixer) {
     // Stop all playback
     audio_mixer_stop_channel(mixer, -1, STOP_IMMEDIATE);
     
-    pthread_mutex_lock(&mixer->mixer_mutex);
+    mtx_lock(&mixer->mixer_mutex);
     
     // Uninit all sounds
     for (int i = 0; i < MAX_MIXER_CHANNELS; i++) {
         if (mixer->sounds[i]) {
             ma_sound_uninit(mixer->sounds[i]);
             free(mixer->sounds[i]);
-            mixer->sounds[i] = NULL;
+            mixer->sounds[i] = nullptr;
         }
     }
     
@@ -147,8 +147,8 @@ void audio_mixer_destroy(AudioMixer *mixer) {
         ma_engine_uninit(&mixer->engine);
     }
     
-    pthread_mutex_unlock(&mixer->mixer_mutex);
-    pthread_mutex_destroy(&mixer->mixer_mutex);
+    mtx_unlock(&mixer->mixer_mutex);
+    mtx_destroy(&mixer->mixer_mutex);
     
     free(mixer);
 }
@@ -158,20 +158,20 @@ int audio_mixer_play(AudioMixer *mixer, int channel_id, Sound *sound, const Play
         return -1;
     }
     
-    pthread_mutex_lock(&mixer->mixer_mutex);
+    mtx_lock(&mixer->mixer_mutex);
     
     // Uninit existing sound if any
     if (mixer->sounds[channel_id]) {
         ma_sound_uninit(mixer->sounds[channel_id]);
         free(mixer->sounds[channel_id]);
-        mixer->sounds[channel_id] = NULL;
+        mixer->sounds[channel_id] = nullptr;
     }
     
     // Allocate and initialize new sound
-    mixer->sounds[channel_id] = (ma_sound*)malloc(sizeof(ma_sound));
+    mixer->sounds[channel_id] = malloc(sizeof(ma_sound));
     if (!mixer->sounds[channel_id]) {
-        fprintf(stderr, "[AUDIO] Error: Cannot allocate memory for sound on channel %d\n", channel_id);
-        pthread_mutex_unlock(&mixer->mixer_mutex);
+        LOG_ERROR(LOG_AUDIO, "Cannot allocate memory for sound on channel %d", channel_id);
+        mtx_unlock(&mixer->mixer_mutex);
         return -1;
     }
     
@@ -180,12 +180,12 @@ int audio_mixer_play(AudioMixer *mixer, int channel_id, Sound *sound, const Play
     
     ma_result result = ma_sound_init_from_data_source(&mixer->engine, &sound->decoder,
                                                        MA_SOUND_FLAG_NO_PITCH | MA_SOUND_FLAG_NO_SPATIALIZATION,
-                                                       NULL, mixer->sounds[channel_id]);
+                                                       nullptr, mixer->sounds[channel_id]);
     if (result != MA_SUCCESS) {
-        fprintf(stderr, "[AUDIO] Error: Failed to initialize sound on channel %d\n", channel_id);
+        LOG_ERROR(LOG_AUDIO, "Failed to initialize sound on channel %d", channel_id);
         free(mixer->sounds[channel_id]);
-        mixer->sounds[channel_id] = NULL;
-        pthread_mutex_unlock(&mixer->mixer_mutex);
+        mixer->sounds[channel_id] = nullptr;
+        mtx_unlock(&mixer->mixer_mutex);
         return -1;
     }
     
@@ -206,9 +206,9 @@ int audio_mixer_play(AudioMixer *mixer, int channel_id, Sound *sound, const Play
     
     // Start playing immediately
     ma_sound_start(mixer->sounds[channel_id]);
-    printf("[AUDIO] Channel %d: Playing %s\n", channel_id, sound->filename);
+    LOG_INFO(LOG_AUDIO, "Channel %d: Playing %s", channel_id, sound->filename);
     
-    pthread_mutex_unlock(&mixer->mixer_mutex);
+    mtx_unlock(&mixer->mixer_mutex);
     return 0;
 }
 
@@ -217,26 +217,26 @@ int audio_mixer_play_from(AudioMixer *mixer, int channel_id, Sound *sound, int s
         return -1;
     }
     
-    pthread_mutex_lock(&mixer->mixer_mutex);
+    mtx_lock(&mixer->mixer_mutex);
     
     // Uninit existing sound if any
     if (mixer->sounds[channel_id]) {
         ma_sound_uninit(mixer->sounds[channel_id]);
         free(mixer->sounds[channel_id]);
-        mixer->sounds[channel_id] = NULL;
+        mixer->sounds[channel_id] = nullptr;
     }
     
     // Allocate and initialize new sound
-    mixer->sounds[channel_id] = (ma_sound*)malloc(sizeof(ma_sound));
+    mixer->sounds[channel_id] = malloc(sizeof(ma_sound));
     if (!mixer->sounds[channel_id]) {
-        fprintf(stderr, "[AUDIO] Error: Cannot allocate memory for sound on channel %d\n", channel_id);
-        pthread_mutex_unlock(&mixer->mixer_mutex);
+        LOG_ERROR(LOG_AUDIO, "Cannot allocate memory for sound on channel %d", channel_id);
+        mtx_unlock(&mixer->mixer_mutex);
         return -1;
     }
     
     // Get sample rate to convert milliseconds to frames
     ma_uint32 sample_rate;
-    ma_data_source_get_data_format(&sound->decoder, NULL, NULL, &sample_rate, NULL, 0);
+    ma_data_source_get_data_format(&sound->decoder, nullptr, nullptr, &sample_rate, nullptr, 0);
     
     // Calculate frame position from milliseconds
     ma_uint64 start_frame = (ma_uint64)((start_ms / 1000.0) * sample_rate);
@@ -246,12 +246,12 @@ int audio_mixer_play_from(AudioMixer *mixer, int channel_id, Sound *sound, int s
     
     ma_result result = ma_sound_init_from_data_source(&mixer->engine, &sound->decoder,
                                                        MA_SOUND_FLAG_NO_PITCH | MA_SOUND_FLAG_NO_SPATIALIZATION,
-                                                       NULL, mixer->sounds[channel_id]);
+                                                       nullptr, mixer->sounds[channel_id]);
     if (result != MA_SUCCESS) {
-        fprintf(stderr, "[AUDIO] Error: Failed to initialize sound on channel %d\n", channel_id);
+        LOG_ERROR(LOG_AUDIO, "Failed to initialize sound on channel %d", channel_id);
         free(mixer->sounds[channel_id]);
-        mixer->sounds[channel_id] = NULL;
-        pthread_mutex_unlock(&mixer->mixer_mutex);
+        mixer->sounds[channel_id] = nullptr;
+        mtx_unlock(&mixer->mixer_mutex);
         return -1;
     }
     
@@ -272,9 +272,9 @@ int audio_mixer_play_from(AudioMixer *mixer, int channel_id, Sound *sound, int s
     
     // Start playing immediately
     ma_sound_start(mixer->sounds[channel_id]);
-    printf("[AUDIO] Channel %d: Playing %s from %dms\n", channel_id, sound->filename, start_ms);
+    LOG_INFO(LOG_AUDIO, "Channel %d: Playing %s from %dms", channel_id, sound->filename, start_ms);
     
-    pthread_mutex_unlock(&mixer->mixer_mutex);
+    mtx_unlock(&mixer->mixer_mutex);
     return 0;
 }
 
@@ -283,11 +283,11 @@ int audio_mixer_start_channel(AudioMixer *mixer, int channel_id) {
         return -1;
     }
     
-    pthread_mutex_lock(&mixer->mixer_mutex);
+    mtx_lock(&mixer->mixer_mutex);
     
     if (!mixer->active[channel_id] || !mixer->sounds[channel_id]) {
-        fprintf(stderr, "[AUDIO] Error: Channel %d has no track loaded\n", channel_id);
-        pthread_mutex_unlock(&mixer->mixer_mutex);
+        LOG_ERROR(LOG_AUDIO, "Channel %d has no track loaded", channel_id);
+        mtx_unlock(&mixer->mixer_mutex);
         return -1;
     }
     
@@ -295,8 +295,8 @@ int audio_mixer_start_channel(AudioMixer *mixer, int channel_id) {
     ma_sound_seek_to_pcm_frame(mixer->sounds[channel_id], 0);
     ma_sound_start(mixer->sounds[channel_id]);
     
-    printf("[AUDIO] Started channel %d\n", channel_id);
-    pthread_mutex_unlock(&mixer->mixer_mutex);
+    LOG_INFO(LOG_AUDIO, "Started channel %d", channel_id);
+    mtx_unlock(&mixer->mixer_mutex);
     
     return 0;
 }
@@ -304,7 +304,7 @@ int audio_mixer_start_channel(AudioMixer *mixer, int channel_id) {
 int audio_mixer_stop_channel(AudioMixer *mixer, int channel_id, StopMode mode) {
     if (!mixer) return -1;
     
-    pthread_mutex_lock(&mixer->mixer_mutex);
+    mtx_lock(&mixer->mixer_mutex);
     
     if (channel_id == -1) {
         // Stop all channels
@@ -330,7 +330,7 @@ int audio_mixer_stop_channel(AudioMixer *mixer, int channel_id, StopMode mode) {
         }
     }
     
-    pthread_mutex_unlock(&mixer->mixer_mutex);
+    mtx_unlock(&mixer->mixer_mutex);
     
     // If stop after finish for all channels, wait for them
     if (channel_id == -1 && mode == STOP_AFTER_FINISH) {
@@ -356,7 +356,7 @@ int audio_mixer_set_volume(AudioMixer *mixer, int channel_id, float volume) {
     if (volume < 0.0f) volume = 0.0f;
     if (volume > 1.0f) volume = 1.0f;
     
-    pthread_mutex_lock(&mixer->mixer_mutex);
+    mtx_lock(&mixer->mixer_mutex);
     
     if (channel_id == -1) {
         mixer->master_volume = volume;
@@ -368,14 +368,14 @@ int audio_mixer_set_volume(AudioMixer *mixer, int channel_id, float volume) {
         }
     }
     
-    pthread_mutex_unlock(&mixer->mixer_mutex);
+    mtx_unlock(&mixer->mixer_mutex);
     return 0;
 }
 
 bool audio_mixer_is_playing(AudioMixer *mixer) {
     if (!mixer) return false;
     
-    pthread_mutex_lock(&mixer->mixer_mutex);
+    mtx_lock(&mixer->mixer_mutex);
     
     bool playing = false;
     for (int i = 0; i < mixer->max_channels; i++) {
@@ -385,7 +385,7 @@ bool audio_mixer_is_playing(AudioMixer *mixer) {
         }
     }
     
-    pthread_mutex_unlock(&mixer->mixer_mutex);
+    mtx_unlock(&mixer->mixer_mutex);
     return playing;
 }
 
@@ -394,21 +394,21 @@ bool audio_mixer_is_channel_playing(AudioMixer *mixer, int channel_id) {
         return false;
     }
     
-    pthread_mutex_lock(&mixer->mixer_mutex);
+    mtx_lock(&mixer->mixer_mutex);
     
     bool playing = false;
     if (mixer->sounds[channel_id]) {
         playing = ma_sound_is_playing(mixer->sounds[channel_id]);
     }
     
-    pthread_mutex_unlock(&mixer->mixer_mutex);
+    mtx_unlock(&mixer->mixer_mutex);
     return playing;
 }
 
 int audio_mixer_stop_looping(AudioMixer *mixer, int channel_id) {
     if (!mixer) return -1;
     
-    pthread_mutex_lock(&mixer->mixer_mutex);
+    mtx_lock(&mixer->mixer_mutex);
     
     if (channel_id == -1) {
         // Disable looping on all channels
@@ -418,16 +418,16 @@ int audio_mixer_stop_looping(AudioMixer *mixer, int channel_id) {
                 ma_sound_set_looping(mixer->sounds[i], MA_FALSE);
             }
         }
-        printf("[AUDIO] Looping disabled on all channels - will finish current iterations\n");
+        LOG_INFO(LOG_AUDIO, "Looping disabled on all channels - will finish current iterations");
     } else if (channel_id >= 0 && channel_id < mixer->max_channels) {
         if (mixer->sounds[channel_id]) {
             mixer->loop[channel_id] = false;
             ma_sound_set_looping(mixer->sounds[channel_id], MA_FALSE);
-            printf("[AUDIO] Looping disabled on channel %d - will finish current iteration\n", channel_id);
+            LOG_INFO(LOG_AUDIO, "Looping disabled on channel %d - will finish current iteration", channel_id);
         }
     }
     
-    pthread_mutex_unlock(&mixer->mixer_mutex);
+    mtx_unlock(&mixer->mixer_mutex);
     return 0;
 }
 
@@ -440,13 +440,13 @@ struct SoundManager {
 };
 
 SoundManager* sound_manager_create(void) {
-    SoundManager *manager = (SoundManager*)calloc(1, sizeof(SoundManager));
+    SoundManager *manager = calloc(1, sizeof(SoundManager));
     if (!manager) {
-        fprintf(stderr, "[AUDIO] Error: Cannot allocate memory for sound manager\n");
-        return NULL;
+        LOG_ERROR(LOG_AUDIO, "Cannot allocate memory for sound manager");
+        return nullptr;
     }
     
-    printf("[AUDIO] Sound manager created\n");
+    LOG_INFO(LOG_AUDIO, "Sound manager created");
     return manager;
 }
 
@@ -457,31 +457,31 @@ void sound_manager_destroy(SoundManager *manager) {
     for (int i = 0; i < SOUND_ID_COUNT; i++) {
         if (manager->sounds[i]) {
             sound_destroy(manager->sounds[i]);
-            manager->sounds[i] = NULL;
+            manager->sounds[i] = nullptr;
         }
     }
     
     free(manager);
-    printf("[AUDIO] Sound manager destroyed\n");
+    LOG_INFO(LOG_AUDIO, "Sound manager destroyed");
 }
 
 int sound_manager_load_sound(SoundManager *manager, SoundID id, const char *filename) {
     if (!manager) return -1;
     if (id < 0 || id >= SOUND_ID_COUNT) return -1;
     
-    // Skip if filename is NULL
+    // Skip if filename is nullptr
     if (!filename) return 0;
     
     // Destroy existing sound if any
     if (manager->sounds[id]) {
         sound_destroy(manager->sounds[id]);
-        manager->sounds[id] = NULL;
+        manager->sounds[id] = nullptr;
     }
     
     // Load new sound
     manager->sounds[id] = sound_load(filename);
     if (!manager->sounds[id]) {
-        fprintf(stderr, "[AUDIO] Failed to load sound %d from %s\n", id, filename);
+        LOG_ERROR(LOG_AUDIO, "Failed to load sound %d from %s", id, filename);
         return -1;
     }
     
@@ -489,7 +489,7 @@ int sound_manager_load_sound(SoundManager *manager, SoundID id, const char *file
 }
 
 Sound* sound_manager_get_sound(SoundManager *manager, SoundID id) {
-    if (!manager) return NULL;
-    if (id < 0 || id >= SOUND_ID_COUNT) return NULL;
+    if (!manager) return nullptr;
+    if (id < 0 || id >= SOUND_ID_COUNT) return nullptr;
     return manager->sounds[id];
 }

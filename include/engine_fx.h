@@ -29,10 +29,10 @@ typedef void (*EngineStateCallback)(EngineState old_state, EngineState new_state
 
 /**
  * Create a new engine FX controller
- * @param mixer Audio mixer handle (can be NULL if no audio)
+ * @param mixer Audio mixer handle (can be nullptr if no audio)
  * @param audio_channel Audio channel to use for engine sounds
  * @param config Engine FX configuration
- * @return Engine FX handle, or NULL on failure
+ * @return Engine FX handle, or nullptr on failure
  */
 EngineFX* engine_fx_create(AudioMixer *mixer, int audio_channel, 
                            const EngineFXConfig *config);
@@ -46,9 +46,9 @@ void engine_fx_destroy(EngineFX *engine);
 /**
  * Load sound tracks for engine (all optional)
  * @param engine Engine FX handle
- * @param starting_sound Sound for starting/transition (NULL to skip)
- * @param running_sound Sound for running state (NULL to skip)
- * @param stopping_sound Sound for stopping transition (NULL to skip)
+ * @param starting_sound Sound for starting/transition (nullptr to skip)
+ * @param running_sound Sound for running state (nullptr to skip)
+ * @param stopping_sound Sound for stopping transition (nullptr to skip)
  * @return 0 on success, -1 on failure
  */
 int engine_fx_load_sounds(EngineFX *engine, Sound *starting_sound, Sound *running_sound, Sound *stopping_sound);

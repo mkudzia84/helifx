@@ -9,7 +9,7 @@ typedef struct Led Led;
 /**
  * Create a new LED controller
  * @param pin GPIO pin number for LED output
- * @return Led handle or NULL on error
+ * @return Led handle or nullptr on error
  */
 Led* led_create(int pin);
 

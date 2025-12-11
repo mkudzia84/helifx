@@ -27,7 +27,7 @@ struct Servo {
  */
 static long long get_time_ms(void) {
     struct timeval tv;
-    gettimeofday(&tv, nullptr);
+    gettimeofday(&tv, NULL);
     return (long long)tv.tv_sec * 1000 + tv.tv_usec / 1000;
 }
 
@@ -67,11 +67,11 @@ static float clamp_float(float value, float min, float max) {
 /**
  * @brief Servo processing thread
  */
-static int servo_thread_func(void *arg) {
-    Servo *servo = (Servo *)arg;
+static void* servo_thread_func(void *arg) {
+    Servo *servo = arg;
     long long last_time = get_time_ms();
     
-    LOG_INFO(LOG_SERVO, "Processing thread started");
+    printf("[SERVO] Processing thread started\n");
     
     while (servo->running) {
         long long current_time = get_time_ms();
@@ -152,30 +152,30 @@ static int servo_thread_func(void *arg) {
         usleep(update_interval_ms * 1000);
     }
     
-    LOG_INFO(LOG_SERVO, "Processing thread stopped");
-    return thrd_success;
+    printf("[SERVO] Processing thread stopped\n");
+    return NULL;
 }
 
 Servo* servo_create(const ServoConfig *config) {
     if (!config) {
-        LOG_ERROR(LOG_SERVO, "Config is nullptr");
-        return nullptr;
+        fprintf(stderr, "[SERVO] Error: Config is NULL\n");
+        return NULL;
     }
     
     if (config->input_min_us >= config->input_max_us) {
-        LOG_ERROR(LOG_SERVO, "Invalid input range");
-        return nullptr;
+        fprintf(stderr, "[SERVO] Error: Invalid input range\n");
+        return NULL;
     }
     
     if (config->output_min_us >= config->output_max_us) {
-        LOG_ERROR(LOG_SERVO, "Invalid output range");
-        return nullptr;
+        fprintf(stderr, "[SERVO] Error: Invalid output range\n");
+        return NULL;
     }
     
-    Servo *servo = (Servo *)calloc(1, sizeof(Servo));
+    Servo *servo = calloc(1, sizeof(Servo));
     if (!servo) {
-        LOG_ERROR(LOG_SERVO, "Cannot allocate memory");
-        return nullptr;
+        fprintf(stderr, "[SERVO] Error: Cannot allocate memory\n");
+        return NULL;
     }
     
     memcpy(&servo->config, config, sizeof(ServoConfig));
@@ -196,18 +196,18 @@ Servo* servo_create(const ServoConfig *config) {
     servo->running = true;
     
     // Start processing thread
-    if (thrd_create(&servo->thread, servo_thread_func, servo) != thrd_success) {
-        LOG_ERROR(LOG_SERVO, "Failed to create processing thread");
+    if (thrd_create(&servo->thread, NULL, servo_thread_func, servo) != 0) {
+        fprintf(stderr, "[SERVO] Error: Failed to create processing thread\n");
         mtx_destroy(&servo->mutex);
         free(servo);
-        return nullptr;
+        return NULL;
     }
     
-    LOG_INFO(LOG_SERVO, "Created (input: %d-%d us, output: %d-%d us, speed: %.0f us/s, accel: %.0f us/s², rate: %dHz)",
-             config->input_min_us, config->input_max_us,
-             config->output_min_us, config->output_max_us,
-             config->max_speed_us_per_sec, config->max_accel_us_per_sec2,
-             servo->config.update_rate_hz);
+    printf("[SERVO] Created (input: %d-%d us, output: %d-%d us, speed: %.0f us/s, accel: %.0f us/sÂ², rate: %dHz)\n",
+           config->input_min_us, config->input_max_us,
+           config->output_min_us, config->output_max_us,
+           config->max_speed_us_per_sec, config->max_accel_us_per_sec2,
+           servo->config.update_rate_hz);
     
     return servo;
 }
@@ -217,12 +217,12 @@ void servo_destroy(Servo *servo) {
     
     // Stop thread
     servo->running = false;
-    thrd_join(servo->thread, nullptr);
+    thrd_join(servo->thread, NULL);
     
     mtx_destroy(&servo->mutex);
     free(servo);
     
-    LOG_INFO(LOG_SERVO, "Destroyed");
+    printf("[SERVO] Destroyed\n");
 }
 
 void servo_set_input(Servo *servo, int input_us) {
@@ -237,9 +237,9 @@ int servo_get_output(const Servo *servo) {
     if (!servo) return 0;
     
     int output;
-    mtx_lock(&servo->mutex);
+    mtx_lock((mtx_t *)&servo->mutex);
     output = (int)servo->current_output_us;
-    mtx_unlock(&servo->mutex);
+    mtx_unlock((mtx_t *)&servo->mutex);
     
     return output;
 }
@@ -248,9 +248,9 @@ int servo_get_target(const Servo *servo) {
     if (!servo) return 0;
     
     int target;
-    mtx_lock(&servo->mutex);
+    mtx_lock((mtx_t *)&servo->mutex);
     target = servo->target_output_us;
-    mtx_unlock(&servo->mutex);
+    mtx_unlock((mtx_t *)&servo->mutex);
     
     return target;
 }
@@ -259,9 +259,9 @@ float servo_get_velocity(const Servo *servo) {
     if (!servo) return 0.0f;
     
     float velocity;
-    mtx_lock(&servo->mutex);
+    mtx_lock((mtx_t *)&servo->mutex);
     velocity = servo->current_velocity_us_per_sec;
-    mtx_unlock(&servo->mutex);
+    mtx_unlock((mtx_t *)&servo->mutex);
     
     return velocity;
 }
@@ -309,9 +309,9 @@ int servo_set_config(Servo *servo, const ServoConfig *config) {
 int servo_get_config(const Servo *servo, ServoConfig *config) {
     if (!servo || !config) return -1;
     
-    mtx_lock(&servo->mutex);
+    mtx_lock((mtx_t *)&servo->mutex);
     memcpy(config, &servo->config, sizeof(ServoConfig));
-    mtx_unlock(&servo->mutex);
+    mtx_unlock((mtx_t *)&servo->mutex);
     
     return 0;
 }
@@ -331,4 +331,3 @@ void servo_set_max_acceleration(Servo *servo, float max_accel_us_per_sec2) {
     servo->config.max_accel_us_per_sec2 = max_accel_us_per_sec2;
     mtx_unlock(&servo->mutex);
 }
-

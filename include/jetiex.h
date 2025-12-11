@@ -135,7 +135,7 @@ typedef struct JetiEX JetiEX;
  * @brief Create and initialize JetiEX telemetry
  * 
  * @param config Configuration structure
- * @return JetiEX context or NULL on error
+ * @return JetiEX context or nullptr on error
  */
 JetiEX *jetiex_create(const JetiEXConfig *config);
 
@@ -250,7 +250,7 @@ int jetiex_get_parameter_count(const JetiEX *jetiex);
  * 
  * @param jetiex JetiEX context
  * @param param_id Parameter ID
- * @return Parameter pointer or NULL if not found
+ * @return Parameter pointer or nullptr if not found
  */
 const JetiEXParameter *jetiex_get_parameter(const JetiEX *jetiex, uint8_t param_id);
 

@@ -9,7 +9,8 @@
 #include <errno.h>
 #include <time.h>
 #include <sys/time.h>
-#include <pthread.h>
+#include <threads.h>
+#include "logging.h"
 
 // BCM2835/BCM2711 GPIO register offsets
 #define BCM2835_PERI_BASE   0x20000000  // BCM2835 (Pi 1, Zero)
@@ -29,7 +30,7 @@
 // For BCM2711 (Pi 4)
 #define GPPUPPDN0   57  // Pull-up/down Register 0
 
-static volatile unsigned int *gpio_map = NULL;
+static volatile unsigned int *gpio_map = nullptr;
 static bool initialized = false;
 static unsigned int gpio_base = BCM2835_PERI_BASE;
 
@@ -71,7 +72,7 @@ int gpio_init(void) {
     
     // Map GPIO memory
     gpio_mem = mmap(
-        NULL,
+        nullptr,
         BLOCK_SIZE,
         PROT_READ | PROT_WRITE,
         MAP_SHARED,
@@ -96,9 +97,9 @@ int gpio_init(void) {
 void gpio_cleanup(void) {
     if (!initialized) return;
     
-    if (gpio_map != NULL) {
+    if (gpio_map != nullptr) {
         munmap((void *)gpio_map, BLOCK_SIZE);
-        gpio_map = NULL;
+        gpio_map = nullptr;
     }
     
     initialized = false;
@@ -361,9 +362,9 @@ int gpio_read_pwm_duration(int pin, int timeout_us) {
 
 struct PWMMonitor {
     int pin;
-    pthread_t thread;
-    pthread_mutex_t mutex;
-    pthread_cond_t cond;
+    thrd_t thread;
+    mtx_t mutex;
+    cnd_t cond;
     
     bool running;
     bool has_new_reading;
@@ -376,11 +377,11 @@ struct PWMMonitor {
     int timeout_us;
 };
 
-static void* pwm_monitor_thread(void *arg) {
+static int pwm_monitor_thread(void *arg) {
     PWMMonitor *monitor = (PWMMonitor *)arg;
     
-    printf("[GPIO] PWM monitor thread started for pin %d (timeout: %d µs)\n", 
-           monitor->pin, monitor->timeout_us);
+    LOG_INFO(LOG_GPIO, "PWM monitor thread started for pin %d (timeout: %d µs)", 
+             monitor->pin, monitor->timeout_us);
     
     int timeout_count = 0;
     bool first_signal_received = false;
@@ -390,8 +391,8 @@ static void* pwm_monitor_thread(void *arg) {
         
         if (duration > 0) {
             if (!first_signal_received) {
-                printf("[GPIO] First PWM signal received on pin %d: %d µs\n", 
-                       monitor->pin, duration);
+                LOG_INFO(LOG_GPIO, "First PWM signal received on pin %d: %d µs",
+                         monitor->pin, duration);
                 first_signal_received = true;
             }
             
@@ -399,16 +400,16 @@ static void* pwm_monitor_thread(void *arg) {
             reading.pin = monitor->pin;
             reading.duration_us = duration;
             
-            pthread_mutex_lock(&monitor->mutex);
+            mtx_lock(&monitor->mutex);
             
             // Update current reading (overwrite previous)
             monitor->current_reading = reading;
             monitor->has_new_reading = true;
             
             // Signal waiting threads
-            pthread_cond_broadcast(&monitor->cond);
+            cnd_broadcast(&monitor->cond);
             
-            pthread_mutex_unlock(&monitor->mutex);
+            mtx_unlock(&monitor->mutex);
             
             // Call callback if set
             if (monitor->callback) {
@@ -420,32 +421,32 @@ static void* pwm_monitor_thread(void *arg) {
             // Timeout or error, continue monitoring
             timeout_count++;
             if (timeout_count == 10 && !first_signal_received) {
-                printf("[GPIO] Warning: No PWM signal detected on pin %d after 10 attempts\n", 
-                       monitor->pin);
+                LOG_WARN(LOG_GPIO, "No PWM signal detected on pin %d after 10 attempts", monitor->pin);
             }
             usleep(1000); // Small delay to prevent busy loop
         }
     }
     
-    printf("[GPIO] PWM monitor thread stopped for pin %d\n", monitor->pin);
-    return NULL;
+    LOG_INFO(LOG_GPIO, "PWM monitor thread stopped for pin %d", monitor->pin);
+    return thrd_success;
 }
 
 PWMMonitor* pwm_monitor_create(int pin, PWMCallback callback, void *user_data) {
+PWMMonitor* pwm_monitor_create(int pin, PWMCallback callback, void *user_data) {
     if (!initialized) {
-        fprintf(stderr, "[GPIO] Error: GPIO not initialized\n");
-        return NULL;
+        LOG_ERROR(LOG_GPIO, "GPIO not initialized");
+        return nullptr;
     }
     
     if (pin < 0 || pin > 27) {
-        fprintf(stderr, "[GPIO] Error: Invalid pin number %d (must be 0-27)\n", pin);
-        return NULL;
+        LOG_ERROR(LOG_GPIO, "Invalid pin number %d (must be 0-27)", pin);
+        return nullptr;
     }
     
-    PWMMonitor *monitor = (PWMMonitor *)calloc(1, sizeof(PWMMonitor));
+    PWMMonitor *monitor = calloc(1, sizeof(PWMMonitor));
     if (!monitor) {
-        fprintf(stderr, "[GPIO] Error: Cannot allocate memory for PWM monitor\n");
-        return NULL;
+        LOG_ERROR(LOG_GPIO, "Cannot allocate memory for PWM monitor");
+        return nullptr;
     }
     
     monitor->pin = pin;
@@ -455,22 +456,22 @@ PWMMonitor* pwm_monitor_create(int pin, PWMCallback callback, void *user_data) {
     monitor->has_new_reading = false;
     monitor->timeout_us = 100000; // 100ms default timeout
     
-    pthread_mutex_init(&monitor->mutex, NULL);
-    pthread_cond_init(&monitor->cond, NULL);
+    mtx_init(&monitor->mutex, mtx_plain);
+    cnd_init(&monitor->cond);
     
     // Set pin as input
     if (gpio_set_mode(pin, GPIO_MODE_INPUT) < 0) {
-        fprintf(stderr, "[GPIO] Error: Failed to set pin %d as input\n", pin);
-        pthread_mutex_destroy(&monitor->mutex);
-        pthread_cond_destroy(&monitor->cond);
+        LOG_ERROR(LOG_GPIO, "Failed to set pin %d as input", pin);
+        mtx_destroy(&monitor->mutex);
+        cnd_destroy(&monitor->cond);
         free(monitor);
-        return NULL;
+        return nullptr;
     }
     
-    printf("[GPIO] PWM monitor created for pin %d\n", pin);
+    LOG_INFO(LOG_GPIO, "PWM monitor created for pin %d", pin);
     return monitor;
 }
-
+void pwm_monitor_destroy(PWMMonitor *monitor) {
 void pwm_monitor_destroy(PWMMonitor *monitor) {
     if (!monitor) return;
     
@@ -478,30 +479,29 @@ void pwm_monitor_destroy(PWMMonitor *monitor) {
         pwm_monitor_stop(monitor);
     }
     
-    pthread_mutex_destroy(&monitor->mutex);
-    pthread_cond_destroy(&monitor->cond);
+    mtx_destroy(&monitor->mutex);
+    cnd_destroy(&monitor->cond);
     free(monitor);
     
-    printf("[GPIO] PWM monitor destroyed\n");
+    LOG_INFO(LOG_GPIO, "PWM monitor destroyed");
 }
-
 int pwm_monitor_start(PWMMonitor *monitor) {
     if (!monitor) return -1;
     
     if (monitor->running) {
-        fprintf(stderr, "[GPIO] Warning: PWM monitor already running\n");
+        LOG_WARN(LOG_GPIO, "PWM monitor already running");
         return 0;
     }
     
     monitor->running = true;
     
-    if (pthread_create(&monitor->thread, NULL, pwm_monitor_thread, monitor) != 0) {
-        fprintf(stderr, "[GPIO] Error: Failed to create PWM monitor thread\n");
+    if (thrd_create(&monitor->thread, pwm_monitor_thread, monitor) != thrd_success) {
+        LOG_ERROR(LOG_GPIO, "Failed to create PWM monitor thread");
         monitor->running = false;
         return -1;
     }
     
-    printf("[GPIO] PWM monitor started\n");
+    LOG_INFO(LOG_GPIO, "PWM monitor started");
     return 0;
 }
 
@@ -514,16 +514,16 @@ int pwm_monitor_stop(PWMMonitor *monitor) {
     
     monitor->running = false;
     
-    pthread_join(monitor->thread, NULL);
+    thrd_join(monitor->thread, nullptr);
     
-    printf("[GPIO] PWM monitor stopped\n");
+    LOG_INFO(LOG_GPIO, "PWM monitor stopped");
     return 0;
 }
 
 bool pwm_monitor_get_reading(PWMMonitor *monitor, PWMReading *reading) {
     if (!monitor || !reading) return false;
     
-    pthread_mutex_lock(&monitor->mutex);
+    mtx_lock(&monitor->mutex);
     
     bool has_reading = monitor->has_new_reading;
     if (has_reading) {
@@ -531,7 +531,7 @@ bool pwm_monitor_get_reading(PWMMonitor *monitor, PWMReading *reading) {
         monitor->has_new_reading = false;
     }
     
-    pthread_mutex_unlock(&monitor->mutex);
+    mtx_unlock(&monitor->mutex);
     
     return has_reading;
 }
@@ -539,12 +539,12 @@ bool pwm_monitor_get_reading(PWMMonitor *monitor, PWMReading *reading) {
 bool pwm_monitor_wait_reading(PWMMonitor *monitor, PWMReading *reading, int timeout_ms) {
     if (!monitor || !reading) return false;
     
-    pthread_mutex_lock(&monitor->mutex);
+    mtx_lock(&monitor->mutex);
     
     if (timeout_ms < 0) {
         // Wait indefinitely
         while (!monitor->has_new_reading && monitor->running) {
-            pthread_cond_wait(&monitor->cond, &monitor->mutex);
+            cnd_wait(&monitor->cond, &monitor->mutex);
         }
     } else {
         // Wait with timeout
@@ -558,7 +558,7 @@ bool pwm_monitor_wait_reading(PWMMonitor *monitor, PWMReading *reading, int time
         }
         
         while (!monitor->has_new_reading && monitor->running) {
-            if (pthread_cond_timedwait(&monitor->cond, &monitor->mutex, &ts) != 0) {
+            if (cnd_timedwait(&monitor->cond, &monitor->mutex, &ts) != thrd_success) {
                 break; // Timeout
             }
         }
@@ -570,7 +570,7 @@ bool pwm_monitor_wait_reading(PWMMonitor *monitor, PWMReading *reading, int time
         monitor->has_new_reading = false;
     }
     
-    pthread_mutex_unlock(&monitor->mutex);
+    mtx_unlock(&monitor->mutex);
     
     return has_reading;
 }

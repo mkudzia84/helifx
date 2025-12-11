@@ -31,7 +31,7 @@ static const cyaml_schema_field_t servo_fields[] = {
     CYAML_FIELD_END
 };
 
-static const cyaml_schema_value_t servo_schema = {
+static const cyaml_schema_value_t servo_schema __attribute__((unused)) = {
     CYAML_VALUE_MAPPING(CYAML_FLAG_DEFAULT, ServoConfig, servo_fields),
 };
 
@@ -104,7 +104,7 @@ static const cyaml_schema_field_t engine_fx_fields[] = {
     CYAML_FIELD_END
 };
 
-static const cyaml_schema_value_t engine_fx_schema = {
+static const cyaml_schema_value_t engine_fx_schema __attribute__((unused)) = {
     CYAML_VALUE_MAPPING(CYAML_FLAG_DEFAULT, EngineFXConfig, engine_fx_fields),
 };
 
@@ -115,11 +115,11 @@ static const cyaml_schema_field_t gun_fx_fields[] = {
     CYAML_FIELD_MAPPING("nozzle_flash", CYAML_FLAG_DEFAULT | CYAML_FLAG_OPTIONAL, GunFXConfig, nozzle_flash_enabled, nozzle_flash_fields),
     CYAML_FIELD_MAPPING("smoke", CYAML_FLAG_DEFAULT | CYAML_FLAG_OPTIONAL, GunFXConfig, smoke_enabled, smoke_fields),
     CYAML_FIELD_MAPPING("turret_control", CYAML_FLAG_DEFAULT | CYAML_FLAG_OPTIONAL, GunFXConfig, pitch_servo, turret_control_fields),
-    CYAML_FIELD_SEQUENCE("rates_of_fire", CYAML_FLAG_POINTER | CYAML_FLAG_OPTIONAL, GunFXConfig, rates, &rate_of_fire_schema, 0, CYAML_UNLIMITED),
+    CYAML_FIELD_SEQUENCE_COUNT("rates_of_fire", CYAML_FLAG_POINTER | CYAML_FLAG_OPTIONAL, GunFXConfig, rates, rate_count, &rate_of_fire_schema, 0, CYAML_UNLIMITED),
     CYAML_FIELD_END
 };
 
-static const cyaml_schema_value_t gun_fx_schema = {
+static const cyaml_schema_value_t gun_fx_schema __attribute__((unused)) = {
     CYAML_VALUE_MAPPING(CYAML_FLAG_DEFAULT, GunFXConfig, gun_fx_fields),
 };
 
@@ -136,7 +136,7 @@ static const cyaml_schema_field_t jetiex_fields[] = {
     CYAML_FIELD_END
 };
 
-static const cyaml_schema_value_t jetiex_schema = {
+static const cyaml_schema_value_t jetiex_schema __attribute__((unused)) = {
     CYAML_VALUE_MAPPING(CYAML_FLAG_DEFAULT, JetiEXConfigData, jetiex_fields),
 };
 #endif
@@ -171,36 +171,36 @@ static const cyaml_config_t cyaml_config = {
 
 HeliFXConfig* config_load(const char *config_file) {
     cyaml_err_t err;
-    HeliFXConfig *config = NULL;
+    HeliFXConfig *config = nullptr;
 
-    LOG_INFO("[CONFIG] Loading configuration from: %s", config_file);
+    LOG_INFO(LOG_CONFIG, "Loading configuration from: %s", config_file);
 
     err = cyaml_load_file(config_file, &cyaml_config, &helifx_config_schema,
-                          (cyaml_data_t **)&config, NULL);
+                          (cyaml_data_t **)&config, nullptr);
 
     if (err != CYAML_OK) {
-        LOG_ERROR("[CONFIG] Failed to load config: %s", cyaml_strerror(err));
-        return NULL;
+        LOG_ERROR(LOG_CONFIG, "Failed to load config: %s", cyaml_strerror(err));
+        return nullptr;
     }
 
-    LOG_INFO("[CONFIG] Configuration loaded successfully");
+    LOG_INFO(LOG_CONFIG, "Configuration loaded successfully");
     return config;
 }
 
 int config_save(const char *config_file, const HeliFXConfig *config) {
     cyaml_err_t err;
 
-    LOG_INFO("[CONFIG] Saving configuration to: %s", config_file);
+    LOG_INFO(LOG_CONFIG, "Saving configuration to: %s", config_file);
 
     err = cyaml_save_file(config_file, &cyaml_config, &helifx_config_schema,
                           (cyaml_data_t *)config, 0);
 
     if (err != CYAML_OK) {
-        LOG_ERROR("[CONFIG] Failed to save config: %s", cyaml_strerror(err));
+        LOG_ERROR(LOG_CONFIG, "Failed to save config: %s", cyaml_strerror(err));
         return -1;
     }
 
-    LOG_INFO("[CONFIG] Configuration saved successfully");
+    LOG_INFO(LOG_CONFIG, "Configuration saved successfully");
     return 0;
 }
 
@@ -212,18 +212,18 @@ void config_free(HeliFXConfig *config) {
 
 int config_validate(const HeliFXConfig *config) {
     if (!config) {
-        LOG_ERROR("[CONFIG] Validation failed: NULL config");
+        LOG_ERROR(LOG_CONFIG, "Validation failed: nullptr config");
         return -1;
     }
 
     // Engine validation
     if (config->engine.enabled) {
         if (config->engine.pin < 0) {
-            LOG_ERROR("[CONFIG] Invalid engine pin: %d", config->engine.pin);
+            LOG_ERROR(LOG_CONFIG, "Invalid engine pin: %d", config->engine.pin);
             return -1;
         }
         if (!config->engine.starting_file || !config->engine.running_file || !config->engine.stopping_file) {
-            LOG_ERROR("[CONFIG] Missing engine sound files");
+            LOG_ERROR(LOG_CONFIG, "Missing engine sound files");
             return -1;
         }
     }
@@ -231,27 +231,27 @@ int config_validate(const HeliFXConfig *config) {
     // Gun validation
     if (config->gun.enabled) {
         if (config->gun.trigger_pin < 0) {
-            LOG_ERROR("[CONFIG] Invalid gun trigger pin: %d", config->gun.trigger_pin);
+            LOG_ERROR(LOG_CONFIG, "Invalid gun trigger pin: %d", config->gun.trigger_pin);
             return -1;
         }
         
         // Validate servos
         if (config->gun.pitch_servo.enabled) {
             if (config->gun.pitch_servo.pwm_pin < 0 || config->gun.pitch_servo.output_pin < 0) {
-                LOG_ERROR("[CONFIG] Invalid pitch servo pins");
+                LOG_ERROR(LOG_CONFIG, "Invalid pitch servo pins");
                 return -1;
             }
         }
         if (config->gun.yaw_servo.enabled) {
             if (config->gun.yaw_servo.pwm_pin < 0 || config->gun.yaw_servo.output_pin < 0) {
-                LOG_ERROR("[CONFIG] Invalid yaw servo pins");
+                LOG_ERROR(LOG_CONFIG, "Invalid yaw servo pins");
                 return -1;
             }
         }
         
         // Validate rates of fire
         if (config->gun.rate_count > 0 && !config->gun.rates) {
-            LOG_ERROR("[CONFIG] Invalid rates of fire configuration");
+            LOG_ERROR(LOG_CONFIG, "Invalid rates of fire configuration");
             return -1;
         }
     }
@@ -260,23 +260,23 @@ int config_validate(const HeliFXConfig *config) {
     // JetiEX validation
     if (config->jetiex.enabled) {
         if (!config->jetiex.serial_port) {
-            LOG_ERROR("[CONFIG] Missing JetiEX serial port");
+                LOG_ERROR(LOG_CONFIG, "Missing JetiEX serial port");
             return -1;
         }
         if (config->jetiex.baud_rate == 0) {
-            LOG_ERROR("[CONFIG] Invalid JetiEX baud rate");
+                LOG_ERROR(LOG_CONFIG, "Invalid JetiEX baud rate");
             return -1;
         }
     }
 #endif
 
-    LOG_INFO("[CONFIG] Configuration validation passed");
+    LOG_INFO(LOG_CONFIG, "Configuration validation passed");
     return 0;
 }
 
 void config_print(const HeliFXConfig *config) {
     if (!config) {
-        LOG_ERROR("[CONFIG] Cannot print NULL config");
+        LOG_ERROR(LOG_CONFIG, "Cannot print nullptr config");
         return;
     }
 

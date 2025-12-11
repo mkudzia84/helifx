@@ -10,7 +10,7 @@ typedef struct SmokeGenerator SmokeGenerator;
  * Create a new smoke generator controller
  * @param heater_pin GPIO pin number for heater control
  * @param fan_pin GPIO pin number for fan control
- * @return SmokeGenerator handle or NULL on error
+ * @return SmokeGenerator handle or nullptr on error
  */
 SmokeGenerator* smoke_generator_create(int heater_pin, int fan_pin);
 

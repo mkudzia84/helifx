@@ -5,12 +5,12 @@
 #include "logging.h"
 #include <stdio.h>
 #include <stdlib.h>
-#include <pthread.h>
+#include <threads.h>
 #include <unistd.h>
 
 struct EngineFX {
     EngineState state;
-    pthread_mutex_t mutex;
+    mtx_t mutex;
     
     // PWM monitoring for engine toggle
     PWMMonitor *engine_toggle_pwm_monitor;
@@ -18,7 +18,7 @@ struct EngineFX {
     int engine_toggle_pwm_threshold;  // PWM threshold to consider engine "on"
     
     // Processing thread
-    pthread_t processing_thread;
+    thrd_t processing_thread;
     bool processing_running;
     
     // Audio tracks (optional)
@@ -41,7 +41,7 @@ struct EngineFX {
 };
 
 // Processing thread to monitor PWM and manage engine state
-static void* engine_fx_processing_thread(void *arg) {
+static int engine_fx_processing_thread(void *arg) {
     EngineFX *engine = (EngineFX *)arg;
     PWMReading reading;
     bool engine_switch_on = false;
@@ -105,29 +105,29 @@ static void* engine_fx_processing_thread(void *arg) {
             engine_switch_on = previous_switch_state;
         }
         
-        pthread_mutex_lock(&engine->mutex);
+        mtx_lock(&engine->mutex);
         EngineState current_state = engine->state;
-        pthread_mutex_unlock(&engine->mutex);
+        mtx_unlock(&engine->mutex);
         
         // STOPPED + switch ON → start engine (STARTING or RUNNING)
         if (current_state == ENGINE_STOPPED && engine_switch_on) {
-            pthread_mutex_lock(&engine->mutex);
-            engine->pending_running_sound = (engine->track_running != NULL);
+            mtx_lock(&engine->mutex);
+            engine->pending_running_sound = (engine->track_running != nullptr);
             
             if (engine->mixer && engine->track_starting) {
                 engine->state = ENGINE_STARTING;
                 LOG_STATE(LOG_ENGINE, "STOPPED", "STARTING");
-                printf("[ENGINE] Transitioning to STARTING\n");
+                LOG_INFO(LOG_ENGINE, "Transitioning to STARTING");
                 
                 PlaybackOptions opts = {.loop = false, .volume = 1.0f};
                 audio_mixer_play(engine->mixer, engine->audio_channel, engine->track_starting, &opts);
-                printf("[ENGINE] Playing starting sound\n");
+                LOG_INFO(LOG_ENGINE, "Playing starting sound");
             } else {
                 engine->state = ENGINE_RUNNING;
-                printf("[ENGINE] Transitioning to RUNNING (no starting sound)\n");
+                LOG_INFO(LOG_ENGINE, "Transitioning to RUNNING (no starting sound)");
             }
             
-            pthread_mutex_unlock(&engine->mutex);
+            mtx_unlock(&engine->mutex);
             continue;
         }
         
@@ -135,25 +135,25 @@ static void* engine_fx_processing_thread(void *arg) {
         if ((current_state == ENGINE_STARTING || current_state == ENGINE_RUNNING) && 
             engine->pending_running_sound &&
             !audio_mixer_is_channel_playing(engine->mixer, engine->audio_channel)) {
-            pthread_mutex_lock(&engine->mutex);
+            mtx_lock(&engine->mutex);
             engine->state = ENGINE_RUNNING;
-            printf("[ENGINE] Transitioning to RUNNING\n");
+            LOG_INFO(LOG_ENGINE, "Transitioning to RUNNING");
             
             PlaybackOptions opts = {.loop = true, .volume = 1.0f};
             audio_mixer_play(engine->mixer, engine->audio_channel, engine->track_running, &opts);
-            printf("[ENGINE] Playing running sound (looping)\n");
+            LOG_INFO(LOG_ENGINE, "Playing running sound (looping)");
             engine->pending_running_sound = false;
-            pthread_mutex_unlock(&engine->mutex);
+            mtx_unlock(&engine->mutex);
             continue;
         }
         
         // (STARTING or RUNNING) + switch OFF → stop engine (STOPPING or STOPPED)
         if ((current_state == ENGINE_STARTING || current_state == ENGINE_RUNNING) && !engine_switch_on) {
-            pthread_mutex_lock(&engine->mutex);
+            mtx_lock(&engine->mutex);
             
             if (engine->mixer && engine->track_stopping) {
                 engine->state = ENGINE_STOPPING;
-                printf("[ENGINE] Transitioning to STOPPING\n");
+                LOG_INFO(LOG_ENGINE, "Transitioning to STOPPING");
                 
                 PlaybackOptions opts = {.loop = false, .volume = 1.0f};
                 
@@ -161,32 +161,32 @@ static void* engine_fx_processing_thread(void *arg) {
                 if (current_state == ENGINE_STARTING && engine->stopping_offset_from_starting_ms > 0) {
                     audio_mixer_play_from(engine->mixer, engine->audio_channel, engine->track_stopping,
                                          engine->stopping_offset_from_starting_ms, &opts);
-                    printf("[ENGINE] Playing stopping sound from %dms\n", engine->stopping_offset_from_starting_ms);
+                    LOG_INFO(LOG_ENGINE, "Playing stopping sound from %dms", engine->stopping_offset_from_starting_ms);
                 } else {
                     audio_mixer_play(engine->mixer, engine->audio_channel, engine->track_stopping, &opts);
-                    printf("[ENGINE] Playing stopping sound\n");
+                    LOG_INFO(LOG_ENGINE, "Playing stopping sound");
                 }
             } else {
                 engine->state = ENGINE_STOPPED;
-                printf("[ENGINE] Transitioning to STOPPED (no stopping sound)\n");
+                LOG_INFO(LOG_ENGINE, "Transitioning to STOPPED (no stopping sound)");
                 
                 if (engine->mixer) {
                     audio_mixer_stop_channel(engine->mixer, engine->audio_channel, STOP_IMMEDIATE);
                 }
             }
             
-            pthread_mutex_unlock(&engine->mutex);
+            mtx_unlock(&engine->mutex);
             continue;
         }
         
         // STOPPING + switch ON → restart engine (STARTING or RUNNING)
         if (current_state == ENGINE_STOPPING && engine_switch_on) {
-            pthread_mutex_lock(&engine->mutex);
-            engine->pending_running_sound = (engine->track_running != NULL);
+            mtx_lock(&engine->mutex);
+            engine->pending_running_sound = (engine->track_running != nullptr);
             
             if (engine->mixer && engine->track_starting) {
                 engine->state = ENGINE_STARTING;
-                printf("[ENGINE] Pre-empting STOPPING, transitioning to STARTING\n");
+                LOG_INFO(LOG_ENGINE, "Pre-empting STOPPING, transitioning to STARTING");
                 
                 PlaybackOptions opts = {.loop = false, .volume = 1.0f};
                 
@@ -194,28 +194,28 @@ static void* engine_fx_processing_thread(void *arg) {
                 if (engine->starting_offset_from_stopping_ms > 0) {
                     audio_mixer_play_from(engine->mixer, engine->audio_channel, engine->track_starting, 
                                          engine->starting_offset_from_stopping_ms, &opts);
-                    printf("[ENGINE] Playing starting sound from %dms\n", engine->starting_offset_from_stopping_ms);
+                    LOG_INFO(LOG_ENGINE, "Playing starting sound from %dms", engine->starting_offset_from_stopping_ms);
                 } else {
                     audio_mixer_play(engine->mixer, engine->audio_channel, engine->track_starting, &opts);
-                    printf("[ENGINE] Playing starting sound\n");
+                    LOG_INFO(LOG_ENGINE, "Playing starting sound");
                 }
             } else {
                 engine->state = ENGINE_RUNNING;
-                printf("[ENGINE] Pre-empting STOPPING, transitioning to RUNNING (no starting sound)\n");
+                LOG_INFO(LOG_ENGINE, "Pre-empting STOPPING, transitioning to RUNNING (no starting sound)");
             }
             
-            pthread_mutex_unlock(&engine->mutex);
+            mtx_unlock(&engine->mutex);
             continue;
         }
         
         // STOPPING + sound finished → STOPPED
         if (current_state == ENGINE_STOPPING && 
             !audio_mixer_is_channel_playing(engine->mixer, engine->audio_channel)) {
-            pthread_mutex_lock(&engine->mutex);
+            mtx_lock(&engine->mutex);
             engine->state = ENGINE_STOPPED;
             LOG_STATE(LOG_ENGINE, "RUNNING", "STOPPED");
-            printf("[ENGINE] Transitioning to STOPPED\n");
-            pthread_mutex_unlock(&engine->mutex);
+            LOG_INFO(LOG_ENGINE, "Transitioning to STOPPED");
+            mtx_unlock(&engine->mutex);
             continue;
         }
         
@@ -223,20 +223,20 @@ static void* engine_fx_processing_thread(void *arg) {
     }
     
     LOG_INFO(LOG_ENGINE, "Processing thread stopped");
-    return NULL;
+    return thrd_success;
 }
 
 EngineFX* engine_fx_create(AudioMixer *mixer, int audio_channel, 
                            const EngineFXConfig *config) {
     if (!config) {
-        LOG_ERROR(LOG_ENGINE, "Config is NULL");
-        return NULL;
+        LOG_ERROR(LOG_ENGINE, "Config is nullptr");
+        return nullptr;
     }
     
     EngineFX *engine = (EngineFX *)calloc(1, sizeof(EngineFX));
     if (!engine) {
-        fprintf(stderr, "[ENGINE] Error: Cannot allocate memory for engine\n");
-        return NULL;
+        LOG_ERROR(LOG_ENGINE, "Error: Cannot allocate memory for engine");
+        return nullptr;
     }
     
     engine->state = ENGINE_STOPPED;
@@ -246,18 +246,18 @@ EngineFX* engine_fx_create(AudioMixer *mixer, int audio_channel,
     engine->engine_toggle_pwm_threshold = config->threshold_us;
     engine->starting_offset_from_stopping_ms = config->starting_offset_ms;
     engine->stopping_offset_from_starting_ms = config->stopping_offset_ms;
-    engine->track_starting = NULL;
-    engine->track_running = NULL;
-    engine->track_stopping = NULL;
-    engine->engine_toggle_pwm_monitor = NULL;
+    engine->track_starting = nullptr;
+    engine->track_running = nullptr;
+    engine->track_stopping = nullptr;
+    engine->engine_toggle_pwm_monitor = nullptr;
     engine->processing_running = false;
-    pthread_mutex_init(&engine->mutex, NULL);
+    mtx_init(&engine->mutex, mtx_plain);
     
     // Create PWM monitor if pin specified
     if (config->pin >= 0) {
-        engine->engine_toggle_pwm_monitor = pwm_monitor_create(config->pin, NULL, NULL);
+        engine->engine_toggle_pwm_monitor = pwm_monitor_create(config->pin, nullptr, nullptr);
         if (!engine->engine_toggle_pwm_monitor) {
-            fprintf(stderr, "[ENGINE] Warning: Failed to create PWM monitor for pin %d\n", config->pin);
+            LOG_WARN(LOG_ENGINE, "Failed to create PWM monitor for pin %d", config->pin);
         } else {
             pwm_monitor_start(engine->engine_toggle_pwm_monitor);
             printf("[ENGINE] PWM monitoring started on pin %d (threshold: %d us)\n",
@@ -267,19 +267,19 @@ EngineFX* engine_fx_create(AudioMixer *mixer, int audio_channel,
     
     // Start processing thread
     engine->processing_running = true;
-    if (pthread_create(&engine->processing_thread, NULL, engine_fx_processing_thread, engine) != 0) {
-        fprintf(stderr, "[ENGINE] Error: Failed to create processing thread\n");
+    if (thrd_create(&engine->processing_thread, engine_fx_processing_thread, engine) != thrd_success) {
+        LOG_ERROR(LOG_ENGINE, "Error: Failed to create processing thread");
         engine->processing_running = false;
         if (engine->engine_toggle_pwm_monitor) {
             pwm_monitor_stop(engine->engine_toggle_pwm_monitor);
             pwm_monitor_destroy(engine->engine_toggle_pwm_monitor);
         }
-        pthread_mutex_destroy(&engine->mutex);
+        mtx_destroy(&engine->mutex);
         free(engine);
-        return NULL;
+        return nullptr;
     }
     
-    printf("[ENGINE] Engine FX created (channel: %d)\n", audio_channel);
+    LOG_INFO(LOG_ENGINE, "Engine FX created (channel: %d)", audio_channel);
     return engine;
 }
 
@@ -289,7 +289,7 @@ void engine_fx_destroy(EngineFX *engine) {
     // Stop processing thread
     if (engine->processing_running) {
         engine->processing_running = false;
-        pthread_join(engine->processing_thread, NULL);
+        thrd_join(engine->processing_thread, nullptr);
     }
     
     // Stop and destroy PWM monitor
@@ -298,22 +298,22 @@ void engine_fx_destroy(EngineFX *engine) {
         pwm_monitor_destroy(engine->engine_toggle_pwm_monitor);
     }
     
-    pthread_mutex_destroy(&engine->mutex);
+    mtx_destroy(&engine->mutex);
     free(engine);
     
-    printf("[ENGINE] Engine FX destroyed\n");
+    LOG_INFO(LOG_ENGINE, "Engine FX destroyed");
 }
 
 int engine_fx_load_sounds(EngineFX *engine, Sound *starting_sound, Sound *running_sound, Sound *stopping_sound) {
     if (!engine) return -1;
     
-    pthread_mutex_lock(&engine->mutex);
+    mtx_lock(&engine->mutex);
     
     engine->track_starting = starting_sound;
     engine->track_running = running_sound;
     engine->track_stopping = stopping_sound;
     
-    pthread_mutex_unlock(&engine->mutex);
+    mtx_unlock(&engine->mutex);
     
     printf("[ENGINE] Sounds loaded (starting: %s, running: %s, stopping: %s)\n",
            starting_sound ? "yes" : "no",
@@ -326,9 +326,9 @@ int engine_fx_load_sounds(EngineFX *engine, Sound *starting_sound, Sound *runnin
 EngineState engine_fx_get_state(EngineFX *engine) {
     if (!engine) return ENGINE_STOPPED;
     
-    pthread_mutex_lock(&engine->mutex);
+    mtx_lock(&engine->mutex);
     EngineState state = engine->state;
-    pthread_mutex_unlock(&engine->mutex);
+    mtx_unlock(&engine->mutex);
     
     return state;
 }
@@ -346,9 +346,9 @@ const char* engine_fx_state_to_string(EngineState state) {
 bool engine_fx_is_transitioning(EngineFX *engine) {
     if (!engine) return false;
     
-    pthread_mutex_lock(&engine->mutex);
+    mtx_lock(&engine->mutex);
     bool transitioning = (engine->state == ENGINE_STOPPING);
-    pthread_mutex_unlock(&engine->mutex);
+    mtx_unlock(&engine->mutex);
     
     return transitioning;
 }

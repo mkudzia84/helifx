@@ -36,9 +36,9 @@ int main(int argc, char *argv[]) {
     int audio_channel = 0;
     int starting_offset_ms = 0;
     int stopping_offset_ms = 0;
-    char *starting_file = NULL;
-    char *running_file = NULL;
-    char *stopping_file = NULL;
+    char *starting_file = nullptr;
+    char *running_file = nullptr;
+    char *stopping_file = nullptr;
     
     // Parse command line arguments
     for (int i = 1; i < argc; i++) {
@@ -114,9 +114,9 @@ int main(int argc, char *argv[]) {
     }
     
     // Load sound files if provided
-    Sound *sound_starting = NULL;
-    Sound *sound_running = NULL;
-    Sound *sound_stopping = NULL;
+    Sound *sound_starting = nullptr;
+    Sound *sound_running = nullptr;
+    Sound *sound_stopping = nullptr;
     
     if (starting_file) {
         sound_starting = sound_load(starting_file);

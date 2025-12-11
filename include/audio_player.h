@@ -7,16 +7,19 @@
 typedef struct AudioMixer AudioMixer;
 typedef struct Sound Sound;
 
-// Playback options
+// Playback options with C23 designated initializers
 typedef struct {
     bool loop;              // Loop playback
     float volume;           // Volume level (0.0 to 1.0)
 } PlaybackOptions;
 
-// Stop options
+// Default playback options
+#define PLAYBACK_DEFAULTS (PlaybackOptions){ .loop = false, .volume = 1.0f }
+
+// Stop options with explicit values (C23 compatible)
 typedef enum {
-    STOP_IMMEDIATE,         // Stop immediately
-    STOP_AFTER_FINISH       // Wait until current track finishes
+    STOP_IMMEDIATE = 0,         // Stop immediately
+    STOP_AFTER_FINISH = 1       // Wait until current track finishes
 } StopMode;
 
 // ============================================================================
@@ -26,7 +29,7 @@ typedef enum {
 /**
  * Create a new sound by loading from file
  * @param filename Path to audio file
- * @return Sound handle or NULL on error
+ * @return Sound handle or nullptr on error
  */
 Sound* sound_load(const char *filename);
 
@@ -43,7 +46,7 @@ void sound_destroy(Sound *sound);
 /**
  * Create a new audio mixer for parallel playback
  * @param max_channels Maximum number of simultaneous audio channels
- * @return AudioMixer handle or NULL on error
+ * @return AudioMixer handle or nullptr on error
  */
 AudioMixer* audio_mixer_create(int max_channels);
 
@@ -58,7 +61,7 @@ void audio_mixer_destroy(AudioMixer *mixer);
  * @param mixer Audio mixer handle
  * @param channel_id Channel number (0 to max_channels-1)
  * @param sound Sound handle
- * @param options Playback options (or NULL for defaults)
+ * @param options Playback options (or nullptr for defaults)
  * @return 0 on success, -1 on error
  */
 int audio_mixer_play(AudioMixer *mixer, int channel_id, Sound *sound, const PlaybackOptions *options);
@@ -69,7 +72,7 @@ int audio_mixer_play(AudioMixer *mixer, int channel_id, Sound *sound, const Play
  * @param channel_id Channel number (0 to max_channels-1)
  * @param sound Sound handle
  * @param start_ms Start position in milliseconds from beginning of track
- * @param options Playback options (or NULL for defaults)
+ * @param options Playback options (or nullptr for defaults)
  * @return 0 on success, -1 on error
  */
 int audio_mixer_play_from(AudioMixer *mixer, int channel_id, Sound *sound, int start_ms, const PlaybackOptions *options);
@@ -154,7 +157,7 @@ typedef struct SoundManager SoundManager;
 
 /**
  * Create a new sound manager
- * @return SoundManager handle or NULL on error
+ * @return SoundManager handle or nullptr on error
  */
 SoundManager* sound_manager_create(void);
 
@@ -168,7 +171,7 @@ void sound_manager_destroy(SoundManager *manager);
  * Load a sound
  * @param manager SoundManager handle
  * @param id Sound identifier
- * @param filename Path to audio file (can be NULL to skip loading)
+ * @param filename Path to audio file (can be nullptr to skip loading)
  * @return 0 on success, -1 on error
  */
 int sound_manager_load_sound(SoundManager *manager, SoundID id, const char *filename);
@@ -177,7 +180,7 @@ int sound_manager_load_sound(SoundManager *manager, SoundID id, const char *file
  * Get a sound
  * @param manager SoundManager handle
  * @param id Sound identifier
- * @return Sound handle or NULL if not loaded
+ * @return Sound handle or nullptr if not loaded
  */
 Sound* sound_manager_get_sound(SoundManager *manager, SoundID id);
 

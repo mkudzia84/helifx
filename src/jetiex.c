@@ -6,7 +6,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <termios.h>
-#include <pthread.h>
+#include <threads.h>
 #include <sys/time.h>
 #include <errno.h>
 
@@ -21,9 +21,9 @@ struct JetiEX {
     JetiEXParameter parameters[JETIEX_MAX_PARAMS];
     int parameter_count;
     
-    pthread_t thread;
-    pthread_t rx_thread;
-    pthread_mutex_t mutex;
+    thrd_t thread;
+    thrd_t rx_thread;
+    mtx_t mutex;
     bool running;
     
     char text_message[JETIEX_MAX_TEXT_LENGTH + 1];
@@ -163,7 +163,7 @@ static int build_config_response(JetiEX *jetiex, uint8_t cmd, uint8_t param_id, 
     packet[pos++] = param_id;  // Parameter ID
     
     // Find parameter
-    JetiEXParameter *param = NULL;
+    JetiEXParameter *param = nullptr;
     for (int i = 0; i < jetiex->parameter_count; i++) {
         if (jetiex->parameters[i].id == param_id) {
             param = &jetiex->parameters[i];
@@ -264,7 +264,7 @@ static void handle_config_command(JetiEX *jetiex, const uint8_t *data, size_t le
     
     LOG_DEBUG(LOG_JETIEX, "Received config command: cmd=0x%02X param_id=%d", cmd, param_id);
     
-    pthread_mutex_lock(&jetiex->mutex);
+    mtx_lock(&jetiex->mutex);
     
     switch (cmd) {
         case JETIEX_CMD_READ: {
@@ -278,7 +278,7 @@ static void handle_config_command(JetiEX *jetiex, const uint8_t *data, size_t le
             
         case JETIEX_CMD_WRITE: {
             // Find parameter
-            JetiEXParameter *param = NULL;
+            JetiEXParameter *param = nullptr;
             for (int i = 0; i < jetiex->parameter_count; i++) {
                 if (jetiex->parameters[i].id == param_id) {
                     param = &jetiex->parameters[i];
@@ -388,11 +388,11 @@ static void handle_config_command(JetiEX *jetiex, const uint8_t *data, size_t le
             break;
     }
     
-    pthread_mutex_unlock(&jetiex->mutex);
+    mtx_unlock(&jetiex->mutex);
 }
 
 /* Receive thread for bidirectional communication */
-static void *receive_thread(void *arg) {
+static int receive_thread(void *arg) {
     JetiEX *jetiex = (JetiEX *)arg;
     
     LOG_INIT(LOG_JETIEX, "Receive thread started");
@@ -402,7 +402,7 @@ static void *receive_thread(void *arg) {
         ssize_t n = read(jetiex->serial_fd, &byte, 1);
         
         if (n > 0) {
-            pthread_mutex_lock(&jetiex->mutex);
+            mtx_lock(&jetiex->mutex);
             
             // Add to buffer
             if (jetiex->rx_buffer_len < (int)sizeof(jetiex->rx_buffer)) {
@@ -428,7 +428,7 @@ static void *receive_thread(void *arg) {
                 jetiex->rx_buffer_len = 0;
             }
             
-            pthread_mutex_unlock(&jetiex->mutex);
+            mtx_unlock(&jetiex->mutex);
         } else if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
             LOG_ERROR(LOG_JETIEX, "Serial read error: %s", strerror(errno));
             break;
@@ -438,11 +438,11 @@ static void *receive_thread(void *arg) {
     }
     
     LOG_SHUTDOWN(LOG_JETIEX, "Receive thread");
-    return NULL;
+    return thrd_success;
 }
 
 /* Telemetry transmission thread */
-static void *telemetry_thread(void *arg) {
+static int telemetry_thread(void *arg) {
     JetiEX *jetiex = (JetiEX *)arg;
     uint8_t packet[JETIEX_MAX_PACKET_SIZE];
     
@@ -450,17 +450,17 @@ static void *telemetry_thread(void *arg) {
     
     long long update_interval_ms = 1000 / jetiex->config.update_rate_hz;
     struct timeval last_update;
-    gettimeofday(&last_update, NULL);
+    gettimeofday(&last_update, nullptr);
     
     while (jetiex->running) {
         struct timeval now;
-        gettimeofday(&now, NULL);
+        gettimeofday(&now, nullptr);
         
         long long elapsed_ms = (now.tv_sec - last_update.tv_sec) * 1000 +
                               (now.tv_usec - last_update.tv_usec) / 1000;
         
         if (elapsed_ms >= update_interval_ms) {
-            pthread_mutex_lock(&jetiex->mutex);
+            mtx_lock(&jetiex->mutex);
             
             int packet_len;
             
@@ -476,7 +476,7 @@ static void *telemetry_thread(void *arg) {
                          packet_len, jetiex->sensor_count);
             }
             
-            pthread_mutex_unlock(&jetiex->mutex);
+            mtx_unlock(&jetiex->mutex);
             
             // Transmit packet
             ssize_t written = write(jetiex->serial_fd, packet, packet_len);
@@ -492,7 +492,7 @@ static void *telemetry_thread(void *arg) {
     }
     
     LOG_SHUTDOWN(LOG_JETIEX, "Telemetry transmission");
-    return NULL;
+    return thrd_success;
 }
 
 /* Public API Implementation */
@@ -500,13 +500,13 @@ static void *telemetry_thread(void *arg) {
 JetiEX *jetiex_create(const JetiEXConfig *config) {
     if (!config || !config->serial_port) {
         LOG_ERROR(LOG_JETIEX, "Invalid configuration");
-        return NULL;
+        return nullptr;
     }
     
     JetiEX *jetiex = (JetiEX *)calloc(1, sizeof(JetiEX));
     if (!jetiex) {
         LOG_ERROR(LOG_JETIEX, "Memory allocation failed");
-        return NULL;
+        return nullptr;
     }
     
     memcpy(&jetiex->config, config, sizeof(JetiEXConfig));
@@ -517,7 +517,7 @@ JetiEX *jetiex_create(const JetiEXConfig *config) {
         LOG_ERROR(LOG_JETIEX, "Cannot open serial port %s: %s", 
                  config->serial_port, strerror(errno));
         free(jetiex);
-        return NULL;
+        return nullptr;
     }
     
     // Configure serial port
@@ -526,7 +526,7 @@ JetiEX *jetiex_create(const JetiEXConfig *config) {
         LOG_ERROR(LOG_JETIEX, "tcgetattr failed: %s", strerror(errno));
         close(jetiex->serial_fd);
         free(jetiex);
-        return NULL;
+        return nullptr;
     }
     
     // Set baud rate
@@ -542,7 +542,7 @@ JetiEX *jetiex_create(const JetiEXConfig *config) {
             LOG_ERROR(LOG_JETIEX, "Unsupported baud rate: %u", config->baud_rate);
             close(jetiex->serial_fd);
             free(jetiex);
-            return NULL;
+            return nullptr;
     }
     
     cfsetospeed(&tty, baud);
@@ -577,11 +577,11 @@ JetiEX *jetiex_create(const JetiEXConfig *config) {
         LOG_ERROR(LOG_JETIEX, "tcsetattr failed: %s", strerror(errno));
         close(jetiex->serial_fd);
         free(jetiex);
-        return NULL;
+        return nullptr;
     }
     
     // Initialize mutex
-    pthread_mutex_init(&jetiex->mutex, NULL);
+    mtx_init(&jetiex->mutex, mtx_plain);
     
     LOG_INFO(LOG_JETIEX, "Initialized on %s at %u baud (Mfr:0x%04X Dev:0x%04X)",
              config->serial_port, config->baud_rate,
@@ -601,7 +601,7 @@ void jetiex_destroy(JetiEX *jetiex) {
         close(jetiex->serial_fd);
     }
     
-    pthread_mutex_destroy(&jetiex->mutex);
+    mtx_destroy(&jetiex->mutex);
     
     LOG_SHUTDOWN(LOG_JETIEX, "JetiEX telemetry");
     free(jetiex);
@@ -613,11 +613,11 @@ bool jetiex_add_sensor(JetiEX *jetiex, const JetiEXSensor *sensor) {
         return false;
     }
     
-    pthread_mutex_lock(&jetiex->mutex);
+    mtx_lock(&jetiex->mutex);
     
     if (jetiex->sensor_count >= JETIEX_MAX_SENSORS) {
         LOG_ERROR(LOG_JETIEX, "Maximum sensors reached (%d)", JETIEX_MAX_SENSORS);
-        pthread_mutex_unlock(&jetiex->mutex);
+        mtx_unlock(&jetiex->mutex);
         return false;
     }
     
@@ -626,7 +626,7 @@ bool jetiex_add_sensor(JetiEX *jetiex, const JetiEXSensor *sensor) {
         if (jetiex->sensors[i].id == sensor->id) {
             LOG_WARN(LOG_JETIEX, "Sensor ID %d already exists, replacing", sensor->id);
             memcpy(&jetiex->sensors[i], sensor, sizeof(JetiEXSensor));
-            pthread_mutex_unlock(&jetiex->mutex);
+            mtx_unlock(&jetiex->mutex);
             return true;
         }
     }
@@ -637,7 +637,7 @@ bool jetiex_add_sensor(JetiEX *jetiex, const JetiEXSensor *sensor) {
     LOG_INFO(LOG_JETIEX, "Added sensor #%d: %s (%s)", 
              sensor->id, sensor->label, sensor->unit_label);
     
-    pthread_mutex_unlock(&jetiex->mutex);
+    mtx_unlock(&jetiex->mutex);
     return true;
 }
 
@@ -646,19 +646,19 @@ bool jetiex_update_sensor(JetiEX *jetiex, uint8_t sensor_id, int32_t value) {
         return false;
     }
     
-    pthread_mutex_lock(&jetiex->mutex);
+    mtx_lock(&jetiex->mutex);
     
     for (int i = 0; i < jetiex->sensor_count; i++) {
         if (jetiex->sensors[i].id == sensor_id) {
             jetiex->sensors[i].value = value;
             LOG_DEBUG(LOG_JETIEX, "Sensor #%d updated: %d %s", 
                      sensor_id, value, jetiex->sensors[i].unit_label);
-            pthread_mutex_unlock(&jetiex->mutex);
+            mtx_unlock(&jetiex->mutex);
             return true;
         }
     }
     
-    pthread_mutex_unlock(&jetiex->mutex);
+    mtx_unlock(&jetiex->mutex);
     LOG_WARN(LOG_JETIEX, "Sensor ID %d not found", sensor_id);
     return false;
 }
@@ -668,13 +668,13 @@ bool jetiex_send_text(JetiEX *jetiex, const char *message) {
         return false;
     }
     
-    pthread_mutex_lock(&jetiex->mutex);
+    mtx_lock(&jetiex->mutex);
     
     strncpy(jetiex->text_message, message, JETIEX_MAX_TEXT_LENGTH);
     jetiex->text_message[JETIEX_MAX_TEXT_LENGTH] = '\0';
     jetiex->text_pending = true;
     
-    pthread_mutex_unlock(&jetiex->mutex);
+    mtx_unlock(&jetiex->mutex);
     
     LOG_INFO(LOG_JETIEX, "Text message queued: %s", message);
     return true;
@@ -689,18 +689,18 @@ bool jetiex_enable_sensor(JetiEX *jetiex, uint8_t sensor_id, bool enabled) {
         return false;
     }
     
-    pthread_mutex_lock(&jetiex->mutex);
+    mtx_lock(&jetiex->mutex);
     
     for (int i = 0; i < jetiex->sensor_count; i++) {
         if (jetiex->sensors[i].id == sensor_id) {
             jetiex->sensors[i].enabled = enabled;
             LOG_INFO(LOG_JETIEX, "Sensor #%d %s", sensor_id, enabled ? "enabled" : "disabled");
-            pthread_mutex_unlock(&jetiex->mutex);
+            mtx_unlock(&jetiex->mutex);
             return true;
         }
     }
     
-    pthread_mutex_unlock(&jetiex->mutex);
+    mtx_unlock(&jetiex->mutex);
     return false;
 }
 
@@ -717,7 +717,7 @@ bool jetiex_start(JetiEX *jetiex) {
     jetiex->running = true;
     
     // Start telemetry transmission thread
-    if (pthread_create(&jetiex->thread, NULL, telemetry_thread, jetiex) != 0) {
+    if (thrd_create(&jetiex->thread, telemetry_thread, jetiex) != thrd_success) {
         LOG_ERROR(LOG_JETIEX, "Failed to create telemetry thread");
         jetiex->running = false;
         return false;
@@ -725,10 +725,10 @@ bool jetiex_start(JetiEX *jetiex) {
     
     // Start receive thread if remote configuration is enabled
     if (jetiex->config.remote_config) {
-        if (pthread_create(&jetiex->rx_thread, NULL, receive_thread, jetiex) != 0) {
+        if (thrd_create(&jetiex->rx_thread, receive_thread, jetiex) != thrd_success) {
             LOG_ERROR(LOG_JETIEX, "Failed to create receive thread");
             jetiex->running = false;
-            pthread_join(jetiex->thread, NULL);
+            thrd_join(jetiex->thread, nullptr);
             return false;
         }
         LOG_INFO(LOG_JETIEX, "Remote configuration enabled");
@@ -745,11 +745,11 @@ void jetiex_stop(JetiEX *jetiex) {
     
     LOG_INFO(LOG_JETIEX, "Stopping telemetry...");
     jetiex->running = false;
-    pthread_join(jetiex->thread, NULL);
+    thrd_join(jetiex->thread, nullptr);
     
     // Stop receive thread if it was started
     if (jetiex->config.remote_config) {
-        pthread_join(jetiex->rx_thread, NULL);
+        thrd_join(jetiex->rx_thread, nullptr);
     }
 }
 
@@ -862,11 +862,11 @@ bool jetiex_add_parameter(JetiEX *jetiex, const JetiEXParameter *param) {
         return false;
     }
     
-    pthread_mutex_lock(&jetiex->mutex);
+    mtx_lock(&jetiex->mutex);
     
     if (jetiex->parameter_count >= JETIEX_MAX_PARAMS) {
         LOG_ERROR(LOG_JETIEX, "Maximum parameters reached (%d)", JETIEX_MAX_PARAMS);
-        pthread_mutex_unlock(&jetiex->mutex);
+        mtx_unlock(&jetiex->mutex);
         return false;
     }
     
@@ -875,7 +875,7 @@ bool jetiex_add_parameter(JetiEX *jetiex, const JetiEXParameter *param) {
         if (jetiex->parameters[i].id == param->id) {
             LOG_WARN(LOG_JETIEX, "Parameter ID %d already exists, replacing", param->id);
             memcpy(&jetiex->parameters[i], param, sizeof(JetiEXParameter));
-            pthread_mutex_unlock(&jetiex->mutex);
+            mtx_unlock(&jetiex->mutex);
             return true;
         }
     }
@@ -886,7 +886,7 @@ bool jetiex_add_parameter(JetiEX *jetiex, const JetiEXParameter *param) {
     LOG_INFO(LOG_JETIEX, "Added parameter #%d: %s (type %d)", 
              param->id, param->name, param->type);
     
-    pthread_mutex_unlock(&jetiex->mutex);
+    mtx_unlock(&jetiex->mutex);
     return true;
 }
 
@@ -895,7 +895,7 @@ bool jetiex_remove_parameter(JetiEX *jetiex, uint8_t param_id) {
         return false;
     }
     
-    pthread_mutex_lock(&jetiex->mutex);
+    mtx_lock(&jetiex->mutex);
     
     for (int i = 0; i < jetiex->parameter_count; i++) {
         if (jetiex->parameters[i].id == param_id) {
@@ -905,12 +905,12 @@ bool jetiex_remove_parameter(JetiEX *jetiex, uint8_t param_id) {
             }
             jetiex->parameter_count--;
             LOG_INFO(LOG_JETIEX, "Removed parameter #%d", param_id);
-            pthread_mutex_unlock(&jetiex->mutex);
+            mtx_unlock(&jetiex->mutex);
             return true;
         }
     }
     
-    pthread_mutex_unlock(&jetiex->mutex);
+    mtx_unlock(&jetiex->mutex);
     return false;
 }
 
@@ -920,7 +920,7 @@ int jetiex_get_parameter_count(const JetiEX *jetiex) {
 
 const JetiEXParameter *jetiex_get_parameter(const JetiEX *jetiex, uint8_t param_id) {
     if (!jetiex) {
-        return NULL;
+        return nullptr;
     }
     
     for (int i = 0; i < jetiex->parameter_count; i++) {
@@ -929,7 +929,7 @@ const JetiEXParameter *jetiex_get_parameter(const JetiEX *jetiex, uint8_t param_
         }
     }
     
-    return NULL;
+    return nullptr;
 }
 
 bool jetiex_update_parameter(JetiEX *jetiex, uint8_t param_id, const void *value) {
@@ -937,7 +937,7 @@ bool jetiex_update_parameter(JetiEX *jetiex, uint8_t param_id, const void *value
         return false;
     }
     
-    pthread_mutex_lock(&jetiex->mutex);
+    mtx_lock(&jetiex->mutex);
     
     for (int i = 0; i < jetiex->parameter_count; i++) {
         if (jetiex->parameters[i].id == param_id) {
@@ -968,11 +968,11 @@ bool jetiex_update_parameter(JetiEX *jetiex, uint8_t param_id, const void *value
                     break;
             }
             
-            pthread_mutex_unlock(&jetiex->mutex);
+            mtx_unlock(&jetiex->mutex);
             return true;
         }
     }
     
-    pthread_mutex_unlock(&jetiex->mutex);
+    mtx_unlock(&jetiex->mutex);
     return false;
 }

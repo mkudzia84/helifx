@@ -81,7 +81,7 @@ int main(int argc, char *argv[]) {
     }
     
     // Initialize Engine FX
-    EngineFX *engine = NULL;
+    EngineFX *engine = nullptr;
     
     if (config->engine.enabled) {
         printf("[HELIFX] Initializing Engine FX...\n");
@@ -105,7 +105,7 @@ int main(int argc, char *argv[]) {
     }
     
     // Initialize Gun FX
-    GunFX *gun = NULL;
+    GunFX *gun = nullptr;
     
     if (config->gun.enabled) {
         printf("[HELIFX] Initializing Gun FX...\n");
@@ -127,12 +127,12 @@ int main(int argc, char *argv[]) {
             if (!rates) {
                 fprintf(stderr, "[HELIFX] Error: Failed to allocate rates array\n");
                 gun_fx_destroy(gun);
-                gun = NULL;
+                gun = nullptr;
             } else {
                 for (int i = 0; i < config->gun.rate_count; i++) {
                     rates[i].rounds_per_minute = config->gun.rates[i].rpm;
                     rates[i].pwm_threshold_us = config->gun.rates[i].pwm_threshold_us;
-                    rates[i].sound = (i < 10) ? sound_manager_get_sound(sound_mgr, SOUND_GUN_RATE_1 + i) : NULL;
+                    rates[i].sound = (i < 10) ? sound_manager_get_sound(sound_mgr, SOUND_GUN_RATE_1 + i) : nullptr;
                 }
                 
                 if (gun_fx_set_rates_of_fire(gun, rates, config->gun.rate_count) != 0) {

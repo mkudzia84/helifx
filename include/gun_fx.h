@@ -23,10 +23,10 @@ typedef struct {
 
 /**
  * Create a new gun FX controller
- * @param mixer Audio mixer handle (can be NULL if no audio)
+ * @param mixer Audio mixer handle (can be nullptr if no audio)
  * @param audio_channel Audio channel to use for gun sounds
  * @param config Gun FX configuration
- * @return GunFX handle, or NULL on failure
+ * @return GunFX handle, or nullptr on failure
  */
 GunFX* gun_fx_create(AudioMixer *mixer, int audio_channel,
                      const GunFXConfig *config);
@@ -77,14 +77,14 @@ void gun_fx_set_smoke_fan_off_delay(GunFX *gun, int delay_ms);
 /**
  * Get pitch servo handle
  * @param gun GunFX handle
- * @return Servo handle or NULL if disabled
+ * @return Servo handle or nullptr if disabled
  */
 Servo* gun_fx_get_pitch_servo(GunFX *gun);
 
 /**
  * Get yaw servo handle
  * @param gun GunFX handle
- * @return Servo handle or NULL if disabled
+ * @return Servo handle or nullptr if disabled
  */
 Servo* gun_fx_get_yaw_servo(GunFX *gun);
 

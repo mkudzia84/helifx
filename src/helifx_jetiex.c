@@ -10,10 +10,10 @@
 #include <stdlib.h>
 
 // Global state for callbacks
-static HeliFXConfig *g_config = NULL;
-static char *g_config_file_path = NULL;
-static GunFX *g_gun = NULL;
-static EngineFX *g_engine = NULL;
+static HeliFXConfig *g_config = nullptr;
+static char *g_config_file_path = nullptr;
+static GunFX *g_gun = nullptr;
+static EngineFX *g_engine = nullptr;
 
 // JetiEX parameter change callback
 static void on_parameter_change(uint8_t param_id, const void *value, void *user_data) {
@@ -109,7 +109,7 @@ static void on_parameter_change(uint8_t param_id, const void *value, void *user_
             for (int i = 0; i < g_config->gun.rate_count; i++) {
                 rates[i].rounds_per_minute = g_config->gun.rates[i].rpm;
                 rates[i].pwm_threshold_us = g_config->gun.rates[i].pwm_threshold_us;
-                rates[i].sound = NULL; // Sound already loaded
+                rates[i].sound = nullptr; // Sound already loaded
             }
             gun_fx_set_rates_of_fire(g_gun, rates, g_config->gun.rate_count);
             free(rates);
@@ -138,7 +138,7 @@ static void on_save_config(void *user_data) {
 JetiEX* helifx_jetiex_init(HeliFXConfig *config, const char *config_file_path,
                            GunFX *gun, EngineFX *engine) {
     if (!config || !config->jetiex.enabled) {
-        return NULL;
+        return nullptr;
     }
     
     // Store global pointers for callbacks
@@ -164,7 +164,7 @@ JetiEX* helifx_jetiex_init(HeliFXConfig *config, const char *config_file_path,
     JetiEX *jetiex = jetiex_create(&jetiex_config);
     if (!jetiex) {
         LOG_ERROR(LOG_JETIEX, "Failed to create JetiEX telemetry");
-        return NULL;
+        return nullptr;
     }
     
     // Add telemetry sensors
@@ -382,14 +382,14 @@ JetiEX* helifx_jetiex_init(HeliFXConfig *config, const char *config_file_path,
         jetiex_add_parameter(jetiex, &smoke_param);
         
         // Set save callback
-        jetiex_set_on_save_callback(jetiex, on_save_config, NULL);
+        jetiex_set_on_save_callback(jetiex, on_save_config, nullptr);
     }
     
     // Start telemetry
     if (!jetiex_start(jetiex)) {
         LOG_ERROR(LOG_JETIEX, "Failed to start JetiEX telemetry");
         jetiex_destroy(jetiex);
-        return NULL;
+        return nullptr;
     }
     
     LOG_INFO(LOG_JETIEX, "JetiEX telemetry started");
@@ -427,8 +427,8 @@ void helifx_jetiex_cleanup(JetiEX *jetiex) {
     jetiex_destroy(jetiex);
     
     // Clear global pointers
-    g_config = NULL;
-    g_config_file_path = NULL;
-    g_gun = NULL;
-    g_engine = NULL;
+    g_config = nullptr;
+    g_config_file_path = nullptr;
+    g_gun = nullptr;
+    g_engine = nullptr;
 }

@@ -152,7 +152,7 @@ int main(int argc, char *argv[]) {
         
     } else {
         // Sync mode with blocking reads
-        PWMMonitor *monitor = pwm_monitor_create(pin, NULL, NULL);
+        PWMMonitor *monitor = pwm_monitor_create(pin, nullptr, nullptr);
         if (!monitor) {
             fprintf(stderr, "Error: Failed to create PWM monitor\n");
             gpio_cleanup();

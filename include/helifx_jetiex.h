@@ -26,7 +26,7 @@
  * @param config_file_path Path to config file for saving
  * @param gun Gun FX controller instance
  * @param engine Engine FX controller instance
- * @return JetiEX instance or NULL on failure
+ * @return JetiEX instance or nullptr on failure
  */
 JetiEX* helifx_jetiex_init(HeliFXConfig *config, const char *config_file_path,
                            GunFX *gun, EngineFX *engine);

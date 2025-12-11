@@ -6,7 +6,7 @@
 #include <sys/select.h>
 #include "audio_player.h"
 
-static AudioMixer *g_mixer = NULL;
+static AudioMixer *g_mixer = nullptr;
 
 void signal_handler(int sig) {
     if (sig == SIGINT) {
@@ -200,7 +200,7 @@ int main(int argc, char *argv[]) {
             prompt_shown = true;
         }
         
-        if (select(STDIN_FILENO + 1, &readfds, NULL, NULL, &tv) > 0) {
+        if (select(STDIN_FILENO + 1, &readfds, nullptr, nullptr, &tv) > 0) {
             if (fgets(cmd, sizeof(cmd), stdin)) {
                 prompt_shown = false; // Reset for next command
                 // Parse command
@@ -264,7 +264,7 @@ int main(int argc, char *argv[]) {
     
     // Cleanup
     audio_mixer_destroy(g_mixer);
-    g_mixer = NULL;
+    g_mixer = nullptr;
     
     return 0;
 }
