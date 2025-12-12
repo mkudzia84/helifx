@@ -36,19 +36,18 @@ int gpio_init(void) {
     // Connect to pigpiod daemon (must be running as systemd service)
     // The daemon must be configured with pin exclusion: pigpiod -l -x 0x3C000C
     
-    // Use gpioConnectSerial() to explicitly connect to the daemon via socket
-    // This will fail if pigpiod is not running
-    int status = gpioConnectSerial(NULL);  // NULL = use default socket path
+    // pigpio_start connects to the daemon on localhost (NULL = default)
+    int status = pigpio_start(NULL, NULL);  // NULL, NULL = localhost, default port
     
-    if (status != 0) {
-        LOG_ERROR(LOG_GPIO, "Failed to connect to pigpiod daemon");
+    if (status < 0) {
+        LOG_ERROR(LOG_GPIO, "Failed to connect to pigpiod daemon (error %d)", status);
         LOG_ERROR(LOG_GPIO, "Make sure pigpiod is running: sudo systemctl start pigpiod");
         LOG_ERROR(LOG_GPIO, "Check status: sudo systemctl status pigpiod");
         return -1;
     }
     
     initialized = true;
-    LOG_INFO(LOG_GPIO, "Connected to pigpiod daemon via socket");
+    LOG_INFO(LOG_GPIO, "Connected to pigpiod daemon (version %d)", status);
     LOG_INFO(LOG_GPIO, "WM8960 Audio HAT pins excluded via daemon: GPIO 2,3 (I2C), 18-21 (I2S)");
     return 0;
 }
@@ -57,7 +56,7 @@ void gpio_cleanup(void) {
     if (!initialized) return;
     
     // Disconnect from pigpiod daemon
-    gpioDisconnect();
+    pigpio_stop();
     initialized = false;
     LOG_INFO(LOG_GPIO, "Disconnected from pigpiod daemon");
 }
