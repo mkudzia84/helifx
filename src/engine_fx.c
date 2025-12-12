@@ -45,7 +45,6 @@ static int engine_fx_processing_thread(void *arg) {
     EngineFX *engine = (EngineFX *)arg;
     PWMReading reading;
     bool engine_switch_on = false;
-    bool previous_switch_state = false;
     
     LOG_INFO(LOG_ENGINE, "Processing thread started");
     
@@ -83,8 +82,6 @@ static int engine_fx_processing_thread(void *arg) {
                 printf("[ENGINE] PWM toggle changed: OFF (avg=%d us, threshold=%d us)\n",
                        reading.duration_us, engine->engine_toggle_pwm_threshold);
             }
-            
-            previous_switch_state = engine_switch_on;
         }
         
         mtx_lock(&engine->mutex);
