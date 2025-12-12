@@ -4,9 +4,9 @@ CFLAGS = -Wall -Wextra -Werror -Wno-unused-function -std=c23 -D_DEFAULT_SOURCE
 INCLUDES = -I./include
 # Dependencies:
 # - libcyaml (YAML parsing) depends on libyaml
-# - pigpio (GPIO control) - requires pigpiod daemon running
+# - libgpiod (GPIO control) - modern Linux GPIO interface
 # - Audio: ALSA libs (libasound2)
-LIBS = -ldl -lm -latomic -lcyaml -lyaml -lpigpio -lrt -lpthread
+LIBS = -lm -lcyaml -lyaml -lgpiod -lpthread
 
 # Build options
 # Set to 0 to disable JetiEX telemetry support
@@ -156,17 +156,16 @@ help:
 	@echo ""
 	@echo "Prerequisites:"
 	@echo "  - GCC 14+ (C23 support required)"
-	@echo "  - pigpio library (GPIO control - used in-process, not as daemon)"
+	@echo "  - libgpiod (GPIO control - modern kernel interface)"
 	@echo "  - libcyaml, libyaml (configuration)"
 	@echo "  - ALSA development libraries (audio)"
 	@echo ""
 	@echo "Install dependencies:"
-	@echo "  sudo apt-get install build-essential libyaml-dev libcyaml-dev libasound2-dev pigpio"
+	@echo "  sudo apt-get install build-essential libyaml-dev libcyaml-dev libasound2-dev libgpiod-dev gpiod"
 	@echo ""
-	@echo "Important - Disable pigpiod daemon:"
-	@echo "  sudo systemctl stop pigpiod"
-	@echo "  sudo systemctl disable pigpiod"
-	@echo "  (helifx runs pigpio in-process, daemon must not be running)"
+	@echo "User Permissions:"
+	@echo "  Add user to gpio group: sudo usermod -a -G gpio \$$USER"
+	@echo "  Then log out and back in for group membership to take effect"
 	@echo ""
 	@echo "Targets:"
 	@echo "  all              - Build helifx (default)"

@@ -47,36 +47,11 @@ apt-get install -y \
     libyaml-dev \
     libcyaml-dev \
     libasound2-dev \
-    pigpio
+    libgpiod-dev \
+    gpiod
 
 echo -e "${GREEN}All dependencies installed${NC}"
-echo ""
-
-# Configure pigpiod daemon with WM8960 Audio HAT pin exclusions
-echo -e "${YELLOW}Configuring pigpiod daemon...${NC}"
-
-# Create systemd service override with pin exclusion mask
-# Mask 0x3C000C = bits 2,3,18,19,20,21 (GPIO 2,3 for I2C, GPIO 18-21 for I2S)
-mkdir -p /etc/systemd/system/pigpiod.service.d
-cat > /etc/systemd/system/pigpiod.service.d/override.conf << EOF
-[Service]
-ExecStart=
-ExecStart=/usr/bin/pigpiod -l -x 0x3C000C
-EOF
-
-# Enable and start pigpiod daemon
-systemctl daemon-reload
-systemctl enable pigpiod
-systemctl restart pigpiod
-
-if systemctl is-active --quiet pigpiod; then
-    echo -e "${GREEN}pigpiod daemon configured and running${NC}"
-    echo -e "${GREEN}WM8960 Audio HAT pins excluded (GPIO 2,3 for I2C, 18-21 for I2S)${NC}"
-else
-    echo -e "${RED}Error: pigpiod daemon failed to start${NC}"
-    echo -e "${YELLOW}Check logs with: sudo journalctl -u pigpiod -n 20${NC}"
-    exit 1
-fi
+echo -e "${GREEN}Using libgpiod for GPIO control (no daemon required)${NC}"
 echo ""
 
 # Build the application

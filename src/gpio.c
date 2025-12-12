@@ -1,5 +1,5 @@
 #include "gpio.h"
-#include <pigpio.h>
+#include <gpiod.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -8,11 +8,22 @@
 #include <time.h>
 #include <sys/time.h>
 #include <threads.h>
+#include <poll.h>
 #include "logging.h"
 
 static bool initialized = false;
+static struct gpiod_chip *chip = NULL;
 
-// WM8960 Audio HAT reserved pins - DO NOT USE with pigpio
+// Single monitoring thread for all PWM pins
+static thrd_t pwm_monitoring_thread;
+static bool pwm_thread_running = false;
+static mtx_t pwm_monitors_mutex;
+
+#define MAX_PWM_MONITORS 8
+static PWMMonitor *active_monitors[MAX_PWM_MONITORS] = {0};
+static int active_monitor_count = 0;
+
+// WM8960 Audio HAT reserved pins - DO NOT USE
 #define WM8960_I2C_SDA    2   // I2C Data
 #define WM8960_I2C_SCL    3   // I2C Clock
 #define WM8960_I2S_BCK    18  // I2S Bit Clock
@@ -27,42 +38,65 @@ static bool is_audio_hat_pin(int pin) {
             pin == WM8960_I2S_DIN || pin == WM8960_I2S_DOUT);
 }
 
+// Track GPIO lines we've requested
+#define MAX_LINES 32
+static struct gpiod_line *lines[MAX_LINES] = {0};
+
 int gpio_init(void) {
     if (initialized) {
         LOG_WARN(LOG_GPIO, "GPIO already initialized");
         return 0;
     }
     
-    // Connect to pigpiod daemon (must be running as systemd service)
-    // The daemon must be configured with pin exclusion: pigpiod -l -x 0x3C000C
-    
-    // pigpio_start connects to the daemon on localhost (NULL = default)
-    int status = pigpio_start(NULL, NULL);  // NULL, NULL = localhost, default port
-    
-    if (status < 0) {
-        LOG_ERROR(LOG_GPIO, "Failed to connect to pigpiod daemon (error %d)", status);
-        LOG_ERROR(LOG_GPIO, "Make sure pigpiod is running: sudo systemctl start pigpiod");
-        LOG_ERROR(LOG_GPIO, "Check status: sudo systemctl status pigpiod");
+    // Open GPIO chip (gpiochip0 on Raspberry Pi)
+    chip = gpiod_chip_open("/dev/gpiochip0");
+    if (!chip) {
+        LOG_ERROR(LOG_GPIO, "Failed to open GPIO chip: %s", strerror(errno));
+        LOG_ERROR(LOG_GPIO, "Make sure you have permission to access /dev/gpiochip0");
         return -1;
     }
     
+    // Initialize PWM monitoring mutex
+    mtx_init(&pwm_monitors_mutex, mtx_plain);
+    
     initialized = true;
-    LOG_INFO(LOG_GPIO, "Connected to pigpiod daemon (version %d)", status);
-    LOG_INFO(LOG_GPIO, "WM8960 Audio HAT pins excluded via daemon: GPIO 2,3 (I2C), 18-21 (I2S)");
+    LOG_INFO(LOG_GPIO, "GPIO subsystem initialized using libgpiod");
+    LOG_INFO(LOG_GPIO, "WM8960 Audio HAT pins (2,3,18-21) will not be used");
     return 0;
 }
 
 void gpio_cleanup(void) {
     if (!initialized) return;
     
-    // Disconnect from pigpiod daemon
-    pigpio_stop();
+    // Stop PWM monitoring thread if running
+    if (pwm_thread_running) {
+        pwm_thread_running = false;
+        thrd_join(pwm_monitoring_thread, NULL);
+    }
+    
+    // Release all GPIO lines
+    for (int i = 0; i < MAX_LINES; i++) {
+        if (lines[i]) {
+            gpiod_line_release(lines[i]);
+            lines[i] = NULL;
+        }
+    }
+    
+    // Destroy PWM monitoring mutex
+    mtx_destroy(&pwm_monitors_mutex);
+    
+    // Close GPIO chip
+    if (chip) {
+        gpiod_chip_close(chip);
+        chip = NULL;
+    }
+    
     initialized = false;
-    LOG_INFO(LOG_GPIO, "Disconnected from pigpiod daemon");
+    LOG_INFO(LOG_GPIO, "GPIO subsystem cleaned up");
 }
 
 int gpio_set_mode(int pin, GPIOMode mode) {
-    if (!initialized) {
+    if (!initialized || !chip) {
         LOG_ERROR(LOG_GPIO, "GPIO not initialized");
         return -1;
     }
@@ -73,16 +107,30 @@ int gpio_set_mode(int pin, GPIOMode mode) {
         return -1;
     }
     
+    // Get the GPIO line
+    struct gpiod_line *line = gpiod_chip_get_line(chip, pin);
+    if (!line) {
+        LOG_ERROR(LOG_GPIO, "Failed to get GPIO line %d", pin);
+        return -1;
+    }
+    
+    // Request the line with appropriate direction
     int result;
     if (mode == GPIO_MODE_INPUT) {
-        result = gpioSetMode(pin, PI_INPUT);
+        result = gpiod_line_request_input(line, "helifx");
     } else {
-        result = gpioSetMode(pin, PI_OUTPUT);
+        result = gpiod_line_request_output(line, "helifx", 0);
     }
     
     if (result < 0) {
-        LOG_ERROR(LOG_GPIO, "gpioSetMode failed for pin %d: %d", pin, result);
+        LOG_ERROR(LOG_GPIO, "Failed to request GPIO %d as %s: %s", 
+                  pin, mode == GPIO_MODE_INPUT ? "input" : "output", strerror(errno));
         return -1;
+    }
+    
+    // Store line reference
+    if (pin < MAX_LINES) {
+        lines[pin] = line;
     }
     
     return 0;
@@ -99,33 +147,19 @@ int gpio_set_pull(int pin, GPIOPull pull) {
         return -1;
     }
     
-    int pigpio_pull;
-    switch (pull) {
-        case GPIO_PULL_OFF:
-            pigpio_pull = PI_PUD_OFF;
-            break;
-        case GPIO_PULL_DOWN:
-            pigpio_pull = PI_PUD_DOWN;
-            break;
-        case GPIO_PULL_UP:
-            pigpio_pull = PI_PUD_UP;
-            break;
-        default:
-            LOG_ERROR(LOG_GPIO, "Invalid pull mode %d", pull);
-            return -1;
-    }
-    
-    int result = gpioSetPullUpDown(pin, pigpio_pull);
-    if (result < 0) {
-        LOG_ERROR(LOG_GPIO, "gpioSetPullUpDown failed for pin %d: %d", pin, result);
-        return -1;
+    // Note: libgpiod v1.x doesn't support pull-up/down configuration directly
+    // This is configured in device tree or requires libgpiod v2.x with bias flags
+    // For now, we'll just log a warning if not GPIO_PULL_OFF
+    if (pull != GPIO_PULL_OFF) {
+        LOG_WARN(LOG_GPIO, "Pull-up/down configuration not supported in libgpiod v1.x");
+        LOG_WARN(LOG_GPIO, "Configure pull resistors in device tree if needed");
     }
     
     return 0;
 }
 
 int gpio_write(int pin, bool value) {
-    if (!initialized) {
+    if (!initialized || !chip) {
         LOG_ERROR(LOG_GPIO, "GPIO not initialized");
         return -1;
     }
@@ -135,9 +169,15 @@ int gpio_write(int pin, bool value) {
         return -1;
     }
     
-    int result = gpioWrite(pin, value ? 1 : 0);
+    struct gpiod_line *line = (pin < MAX_LINES) ? lines[pin] : NULL;
+    if (!line) {
+        LOG_ERROR(LOG_GPIO, "GPIO %d not configured (call gpio_set_mode first)", pin);
+        return -1;
+    }
+    
+    int result = gpiod_line_set_value(line, value ? 1 : 0);
     if (result < 0) {
-        LOG_ERROR(LOG_GPIO, "gpioWrite failed for pin %d: %d", pin, result);
+        LOG_ERROR(LOG_GPIO, "Failed to write GPIO %d: %s", pin, strerror(errno));
         return -1;
     }
     
@@ -145,7 +185,7 @@ int gpio_write(int pin, bool value) {
 }
 
 bool gpio_read(int pin) {
-    if (!initialized) {
+    if (!initialized || !chip) {
         LOG_ERROR(LOG_GPIO, "GPIO not initialized");
         return false;
     }
@@ -155,9 +195,15 @@ bool gpio_read(int pin) {
         return false;
     }
     
-    int result = gpioRead(pin);
+    struct gpiod_line *line = (pin < MAX_LINES) ? lines[pin] : NULL;
+    if (!line) {
+        LOG_ERROR(LOG_GPIO, "GPIO %d not configured (call gpio_set_mode first)", pin);
+        return false;
+    }
+    
+    int result = gpiod_line_get_value(line);
     if (result < 0) {
-        LOG_ERROR(LOG_GPIO, "gpioRead failed for pin %d: %d", pin, result);
+        LOG_ERROR(LOG_GPIO, "Failed to read GPIO %d: %s", pin, strerror(errno));
         return false;
     }
     
@@ -165,15 +211,16 @@ bool gpio_read(int pin) {
 }
 
 // ============================================================================
-// ASYNC PWM MONITOR IMPLEMENTATION (using pigpio alerts)
+// ASYNC PWM MONITOR IMPLEMENTATION (using libgpiod edge detection)
 // ============================================================================
 
 struct PWMMonitor {
     int pin;
     char *feature_name;  // Feature name for logging (e.g., "Trigger", "Pitch Servo")
+    struct gpiod_line *line;  // GPIO line for PWM input
     mtx_t mutex;
     
-    bool running;
+    bool active;
     bool has_new_reading;
     bool first_signal_received;
     
@@ -183,7 +230,7 @@ struct PWMMonitor {
     void *user_data;
     
     // Track rising edge for pulse width calculation
-    uint32_t rise_tick;
+    struct timespec rise_time;
     bool waiting_for_fall;
 
     // Averaging window and ring buffer for recent readings
@@ -196,37 +243,34 @@ struct PWMMonitor {
     int sample_head;             // next write index
 };
 
-// pigpio alert callback - called on every edge
-static void pwm_alert_callback(int gpio, int level, uint32_t tick, void *userdata) {
-    PWMMonitor *monitor = (PWMMonitor *)userdata;
-    if (!monitor || !monitor->running) return;
-    
-    if (level == 1) {
+// Get microseconds from timespec
+static int64_t timespec_to_us(const struct timespec *ts) {
+    return (int64_t)ts->tv_sec * 1000000 + ts->tv_nsec / 1000;
+}
+
+// Process edge event for a specific monitor
+static void process_pwm_event(PWMMonitor *monitor, struct gpiod_line_event *event) {
+    if (event->event_type == GPIOD_LINE_EVENT_RISING_EDGE) {
         // Rising edge - start of pulse
-        monitor->rise_tick = tick;
+        monitor->rise_time = event->ts;
         monitor->waiting_for_fall = true;
-    } else if (level == 0 && monitor->waiting_for_fall) {
-        // Falling edge - end of pulse
-        uint32_t pulse_width;
-        
-        // Handle tick wrap-around (ticks wrap at 2^32 microseconds)
-        if (tick >= monitor->rise_tick) {
-            pulse_width = tick - monitor->rise_tick;
-        } else {
-            pulse_width = (0xFFFFFFFF - monitor->rise_tick) + tick + 1;
-        }
+    } else if (event->event_type == GPIOD_LINE_EVENT_FALLING_EDGE && monitor->waiting_for_fall) {
+        // Falling edge - end of pulse, calculate pulse width
+        int64_t rise_us = timespec_to_us(&monitor->rise_time);
+        int64_t fall_us = timespec_to_us(&event->ts);
+        int pulse_width = (int)(fall_us - rise_us);
         
         // Sanity check: typical RC PWM is 1000-2000µs, allow 500-3000µs
         if (pulse_width >= 500 && pulse_width <= 3000) {
             if (!monitor->first_signal_received) {
-                LOG_INFO(LOG_GPIO, "First PWM signal received on [%s] pin %d: %u µs",
-                         monitor->feature_name ?: "Unknown", gpio, pulse_width);
+                LOG_INFO(LOG_GPIO, "First PWM signal received on [%s] pin %d: %d µs",
+                         monitor->feature_name ?: "Unknown", monitor->pin, pulse_width);
                 monitor->first_signal_received = true;
             }
             
             PWMReading reading;
-            reading.pin = gpio;
-            reading.duration_us = (int)pulse_width;
+            reading.pin = monitor->pin;
+            reading.duration_us = pulse_width;
             
             mtx_lock(&monitor->mutex);
             
@@ -236,7 +280,7 @@ static void pwm_alert_callback(int gpio, int level, uint32_t tick, void *userdat
             
             // Append to averaging buffer
             clock_gettime(CLOCK_MONOTONIC, &monitor->samples[monitor->sample_head].ts);
-            monitor->samples[monitor->sample_head].duration_us = (int)pulse_width;
+            monitor->samples[monitor->sample_head].duration_us = pulse_width;
             monitor->sample_head = (monitor->sample_head + 1) % PWM_AVG_MAX_SAMPLES;
             
             mtx_unlock(&monitor->mutex);
@@ -246,9 +290,70 @@ static void pwm_alert_callback(int gpio, int level, uint32_t tick, void *userdat
                 monitor->callback(reading, monitor->user_data);
             }
         }
-        
         monitor->waiting_for_fall = false;
     }
+}
+
+// Single PWM monitoring thread - polls all active monitors using poll()
+static int pwm_monitoring_thread_func(void *arg) {
+    (void)arg;  // Unused
+    
+    struct pollfd fds[MAX_PWM_MONITORS];
+    struct gpiod_line_event event;
+    
+    LOG_INFO(LOG_GPIO, "PWM monitoring thread started");
+    
+    while (pwm_thread_running) {
+        // Build pollfd array from active monitors
+        int nfds = 0;
+        
+        mtx_lock(&pwm_monitors_mutex);
+        for (int i = 0; i < MAX_PWM_MONITORS; i++) {
+            if (active_monitors[i] && active_monitors[i]->active) {
+                fds[nfds].fd = gpiod_line_event_get_fd(active_monitors[i]->line);
+                fds[nfds].events = POLLIN;
+                fds[nfds].revents = 0;
+                nfds++;
+            }
+        }
+        mtx_unlock(&pwm_monitors_mutex);
+        
+        if (nfds == 0) {
+            // No active monitors, sleep and retry
+            usleep(100000);  // 100ms
+            continue;
+        }
+        
+        // Poll with timeout
+        int ret = poll(fds, nfds, 1000);  // 1 second timeout
+        if (ret < 0) {
+            if (errno == EINTR) continue;
+            LOG_ERROR(LOG_GPIO, "poll() error: %s", strerror(errno));
+            break;
+        }
+        
+        if (ret == 0) continue;  // Timeout
+        
+        // Check which monitors have events
+        mtx_lock(&pwm_monitors_mutex);
+        int fd_idx = 0;
+        for (int i = 0; i < MAX_PWM_MONITORS && fd_idx < nfds; i++) {
+            PWMMonitor *monitor = active_monitors[i];
+            if (!monitor || !monitor->active) continue;
+            
+            if (fds[fd_idx].revents & POLLIN) {
+                // Read all pending events for this monitor
+                while (gpiod_line_event_read(monitor->line, &event) == 0) {
+                    process_pwm_event(monitor, &event);
+                }
+            }
+            fd_idx++;
+        }
+        mtx_unlock(&pwm_monitors_mutex);
+    }
+    
+    LOG_INFO(LOG_GPIO, "PWM monitoring thread stopped");
+    return 0;
 }
 
 PWMMonitor* pwm_monitor_create(int pin, PWMCallback callback, void *user_data) {
@@ -256,7 +361,7 @@ PWMMonitor* pwm_monitor_create(int pin, PWMCallback callback, void *user_data) {
 }
 
 PWMMonitor* pwm_monitor_create_with_name(int pin, const char *feature_name, PWMCallback callback, void *user_data) {
-    if (!initialized) {
+    if (!initialized || !chip) {
         LOG_ERROR(LOG_GPIO, "GPIO not initialized");
         return nullptr;
     }
@@ -276,10 +381,9 @@ PWMMonitor* pwm_monitor_create_with_name(int pin, const char *feature_name, PWMC
     monitor->feature_name = feature_name ? strdup(feature_name) : nullptr;
     monitor->callback = callback;
     monitor->user_data = user_data;
-    monitor->running = false;
+    monitor->active = false;
     monitor->has_new_reading = false;
     monitor->first_signal_received = false;
-    monitor->rise_tick = 0;
     monitor->waiting_for_fall = false;
     monitor->avg_window_ms = 200;  // default averaging window
     monitor->sample_head = 0;
@@ -289,9 +393,10 @@ PWMMonitor* pwm_monitor_create_with_name(int pin, const char *feature_name, PWMC
     
     mtx_init(&monitor->mutex, mtx_plain);
     
-    // Set pin as input
-    if (gpio_set_mode(pin, GPIO_MODE_INPUT) < 0) {
-        LOG_ERROR(LOG_GPIO, "Failed to set pin %d as input", pin);
+    // Get GPIO line for this pin
+    monitor->line = gpiod_chip_get_line(chip, pin);
+    if (!monitor->line) {
+        LOG_ERROR(LOG_GPIO, "Failed to get GPIO line %d", pin);
         mtx_destroy(&monitor->mutex);
         free(monitor->feature_name);
         free(monitor);
@@ -324,39 +429,98 @@ void pwm_monitor_destroy(PWMMonitor *monitor) {
 int pwm_monitor_start(PWMMonitor *monitor) {
     if (!monitor) return -1;
     
-    if (monitor->running) {
+    if (monitor->active) {
         LOG_WARN(LOG_GPIO, "PWM monitor already running");
         return 0;
     }
     
-    // Register pigpio alert callback
-    int result = gpioSetAlertFuncEx(monitor->pin, pwm_alert_callback, monitor);
+    // Request the line for both edge events
+    int result = gpiod_line_request_both_edges_events(monitor->line, "helifx-pwm");
     if (result < 0) {
-        LOG_ERROR(LOG_GPIO, "Failed to set alert function for pin %d: %d", monitor->pin, result);
+        LOG_ERROR(LOG_GPIO, "Failed to request edge events for pin %d: %s", 
+                  monitor->pin, strerror(errno));
         return -1;
     }
     
-    monitor->running = true;
+    // Add monitor to active list
+    mtx_lock(&pwm_monitors_mutex);
     
-    LOG_INFO(LOG_GPIO, "PWM monitor started for [%s] pin %d (using pigpio alerts)", 
-            monitor->feature_name ?: "Unknown", monitor->pin);
+    int slot = -1;
+    for (int i = 0; i < MAX_PWM_MONITORS; i++) {
+        if (!active_monitors[i]) {
+            slot = i;
+            break;
+        }
+    }
+    
+    if (slot < 0) {
+        mtx_unlock(&pwm_monitors_mutex);
+        LOG_ERROR(LOG_GPIO, "Maximum number of PWM monitors (%d) reached", MAX_PWM_MONITORS);
+        gpiod_line_release(monitor->line);
+        return -1;
+    }
+    
+    active_monitors[slot] = monitor;
+    active_monitor_count++;
+    monitor->active = true;
+    
+    // Start shared monitoring thread if not running
+    if (!pwm_thread_running) {
+        pwm_thread_running = true;
+        if (thrd_create(&pwm_monitoring_thread, pwm_monitoring_thread_func, NULL) != thrd_success) {
+            LOG_ERROR(LOG_GPIO, "Failed to create PWM monitoring thread");
+            active_monitors[slot] = NULL;
+            active_monitor_count--;
+            monitor->active = false;
+            pwm_thread_running = false;
+            mtx_unlock(&pwm_monitors_mutex);
+            gpiod_line_release(monitor->line);
+            return -1;
+        }
+    }
+    
+    mtx_unlock(&pwm_monitors_mutex);
+    
+    LOG_INFO(LOG_GPIO, "PWM monitor started for [%s] pin %d (shared thread, %d active)", 
+            monitor->feature_name ?: "Unknown", monitor->pin, active_monitor_count);
     return 0;
 }
 
 int pwm_monitor_stop(PWMMonitor *monitor) {
     if (!monitor) return -1;
     
-    if (!monitor->running) {
+    if (!monitor->active) {
         return 0;
     }
     
-    // Unregister pigpio alert callback
-    gpioSetAlertFuncEx(monitor->pin, nullptr, nullptr);
+    // Remove monitor from active list
+    mtx_lock(&pwm_monitors_mutex);
     
-    monitor->running = false;
+    for (int i = 0; i < MAX_PWM_MONITORS; i++) {
+        if (active_monitors[i] == monitor) {
+            active_monitors[i] = NULL;
+            active_monitor_count--;
+            break;
+        }
+    }
     
-    LOG_INFO(LOG_GPIO, "PWM monitor stopped for [%s]", 
-            monitor->feature_name ?: "Unknown");
+    monitor->active = false;
+    
+    // If no more active monitors, stop the shared thread
+    if (active_monitor_count == 0 && pwm_thread_running) {
+        pwm_thread_running = false;
+        mtx_unlock(&pwm_monitors_mutex);
+        thrd_join(pwm_monitoring_thread, NULL);
+        mtx_lock(&pwm_monitors_mutex);
+    }
+    
+    mtx_unlock(&pwm_monitors_mutex);
+    
+    // Release the GPIO line
+    gpiod_line_release(monitor->line);
+    
+    LOG_INFO(LOG_GPIO, "PWM monitor stopped for [%s] (%d active)", 
+            monitor->feature_name ?: "Unknown", active_monitor_count);
     return 0;
 }
 
@@ -410,7 +574,7 @@ bool pwm_monitor_wait_reading(PWMMonitor *monitor, PWMReading *reading, int time
 
 bool pwm_monitor_is_running(PWMMonitor *monitor) {
     if (!monitor) return false;
-    return monitor->running;
+    return monitor->active;
 }
 
 void pwm_monitor_set_avg_window_ms(PWMMonitor *monitor, int window_ms) {
