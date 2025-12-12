@@ -74,14 +74,20 @@ static const cyaml_schema_value_t rate_of_fire_schema = {
     CYAML_VALUE_MAPPING(CYAML_FLAG_DEFAULT, RateOfFireConfig, rate_of_fire_fields),
 };
 
-// Turret control mapping (nested servos)
-static const cyaml_schema_field_t turret_control_fields[] = {
-    CYAML_FIELD_MAPPING("pitch", CYAML_FLAG_DEFAULT, GunFXConfig, pitch_servo, servo_fields),
-    CYAML_FIELD_MAPPING("yaw", CYAML_FLAG_DEFAULT, GunFXConfig, yaw_servo, servo_fields),
+// Trigger configuration mapping (inline - maps to same struct)
+static const cyaml_schema_field_t trigger_fields[] = {
+    CYAML_FIELD_INT("pin", CYAML_FLAG_DEFAULT, GunFXConfig, trigger_pin),
     CYAML_FIELD_END
 };
 
-// Smoke configuration mapping
+// Nozzle flash configuration mapping (inline - maps to same struct)
+static const cyaml_schema_field_t nozzle_flash_fields[] = {
+    CYAML_FIELD_BOOL("enabled", CYAML_FLAG_DEFAULT, GunFXConfig, nozzle_flash_enabled),
+    CYAML_FIELD_INT("pin", CYAML_FLAG_DEFAULT, GunFXConfig, nozzle_flash_pin),
+    CYAML_FIELD_END
+};
+
+// Smoke configuration mapping (inline - maps to same struct)
 static const cyaml_schema_field_t smoke_fields[] = {
     CYAML_FIELD_BOOL("enabled", CYAML_FLAG_DEFAULT, GunFXConfig, smoke_enabled),
     CYAML_FIELD_INT("fan_pin", CYAML_FLAG_DEFAULT, GunFXConfig, smoke_fan_pin),
@@ -92,36 +98,30 @@ static const cyaml_schema_field_t smoke_fields[] = {
     CYAML_FIELD_END
 };
 
-// Nozzle flash configuration mapping
-static const cyaml_schema_field_t nozzle_flash_fields[] = {
-    CYAML_FIELD_BOOL("enabled", CYAML_FLAG_DEFAULT, GunFXConfig, nozzle_flash_enabled),
-    CYAML_FIELD_INT("pin", CYAML_FLAG_DEFAULT, GunFXConfig, nozzle_flash_pin),
+// Turret control mapping (actual nested structs - pitch and yaw are separate ServoConfig)
+static const cyaml_schema_field_t turret_control_fields[] = {
+    CYAML_FIELD_MAPPING("pitch", CYAML_FLAG_DEFAULT, GunFXConfig, pitch_servo, servo_fields),
+    CYAML_FIELD_MAPPING("yaw", CYAML_FLAG_DEFAULT, GunFXConfig, yaw_servo, servo_fields),
     CYAML_FIELD_END
 };
 
-// Trigger configuration mapping
-static const cyaml_schema_field_t trigger_fields[] = {
-    CYAML_FIELD_INT("pin", CYAML_FLAG_DEFAULT, GunFXConfig, trigger_pin),
-    CYAML_FIELD_END
-};
-
-// Engine sounds transitions mapping
+// Engine sounds transitions mapping (inline - maps to same struct)
 static const cyaml_schema_field_t engine_transitions_fields[] = {
     CYAML_FIELD_INT("starting_offset_ms", CYAML_FLAG_DEFAULT | CYAML_FLAG_OPTIONAL, EngineFXConfig, starting_offset_ms),
     CYAML_FIELD_INT("stopping_offset_ms", CYAML_FLAG_DEFAULT | CYAML_FLAG_OPTIONAL, EngineFXConfig, stopping_offset_ms),
     CYAML_FIELD_END
 };
 
-// Engine sounds mapping
+// Engine sounds mapping (inline - maps to same struct)
 static const cyaml_schema_field_t engine_sounds_fields[] = {
     CYAML_FIELD_STRING_PTR("starting", CYAML_FLAG_POINTER | CYAML_FLAG_OPTIONAL, EngineFXConfig, starting_file, 0, CYAML_UNLIMITED),
     CYAML_FIELD_STRING_PTR("running", CYAML_FLAG_POINTER | CYAML_FLAG_OPTIONAL, EngineFXConfig, running_file, 0, CYAML_UNLIMITED),
     CYAML_FIELD_STRING_PTR("stopping", CYAML_FLAG_POINTER | CYAML_FLAG_OPTIONAL, EngineFXConfig, stopping_file, 0, CYAML_UNLIMITED),
-    CYAML_FIELD_MAPPING("transitions", CYAML_FLAG_DEFAULT | CYAML_FLAG_OPTIONAL, EngineFXConfig, starting_offset_ms, engine_transitions_fields),
+    CYAML_FIELD_MAPPING_INLINE("transitions", CYAML_FLAG_OPTIONAL, EngineFXConfig, engine_transitions_fields),
     CYAML_FIELD_END
 };
 
-// Engine toggle mapping
+// Engine toggle mapping (inline - maps to same struct)
 static const cyaml_schema_field_t engine_toggle_fields[] = {
     CYAML_FIELD_INT("pin", CYAML_FLAG_DEFAULT, EngineFXConfig, pin),
     CYAML_FIELD_INT("threshold_us", CYAML_FLAG_DEFAULT, EngineFXConfig, threshold_us),
@@ -131,8 +131,8 @@ static const cyaml_schema_field_t engine_toggle_fields[] = {
 // EngineFXConfig schema
 static const cyaml_schema_field_t engine_fx_fields[] = {
     CYAML_FIELD_BOOL("enabled", CYAML_FLAG_DEFAULT, EngineFXConfig, enabled),
-    CYAML_FIELD_MAPPING("engine_toggle", CYAML_FLAG_OPTIONAL, EngineFXConfig, pin, engine_toggle_fields),
-    CYAML_FIELD_MAPPING("sounds", CYAML_FLAG_OPTIONAL, EngineFXConfig, starting_file, engine_sounds_fields),
+    CYAML_FIELD_MAPPING_INLINE("engine_toggle", CYAML_FLAG_DEFAULT, EngineFXConfig, engine_toggle_fields),
+    CYAML_FIELD_MAPPING_INLINE("sounds", CYAML_FLAG_DEFAULT, EngineFXConfig, engine_sounds_fields),
     CYAML_FIELD_END
 };
 
@@ -143,10 +143,10 @@ static const cyaml_schema_value_t engine_fx_schema __attribute__((unused)) = {
 // GunFXConfig schema
 static const cyaml_schema_field_t gun_fx_fields[] = {
     CYAML_FIELD_BOOL("enabled", CYAML_FLAG_DEFAULT, GunFXConfig, enabled),
-    CYAML_FIELD_MAPPING("trigger", CYAML_FLAG_DEFAULT, GunFXConfig, trigger_pin, trigger_fields),
-    CYAML_FIELD_MAPPING("nozzle_flash", CYAML_FLAG_DEFAULT | CYAML_FLAG_OPTIONAL, GunFXConfig, nozzle_flash_enabled, nozzle_flash_fields),
-    CYAML_FIELD_MAPPING("smoke", CYAML_FLAG_DEFAULT | CYAML_FLAG_OPTIONAL, GunFXConfig, smoke_enabled, smoke_fields),
-    CYAML_FIELD_MAPPING("turret_control", CYAML_FLAG_DEFAULT | CYAML_FLAG_OPTIONAL, GunFXConfig, pitch_servo, turret_control_fields),
+    CYAML_FIELD_MAPPING_INLINE("trigger", CYAML_FLAG_DEFAULT, GunFXConfig, trigger_fields),
+    CYAML_FIELD_MAPPING_INLINE("nozzle_flash", CYAML_FLAG_DEFAULT | CYAML_FLAG_OPTIONAL, GunFXConfig, nozzle_flash_fields),
+    CYAML_FIELD_MAPPING_INLINE("smoke", CYAML_FLAG_DEFAULT | CYAML_FLAG_OPTIONAL, GunFXConfig, smoke_fields),
+    CYAML_FIELD_MAPPING_INLINE("turret_control", CYAML_FLAG_DEFAULT | CYAML_FLAG_OPTIONAL, GunFXConfig, turret_control_fields),
     CYAML_FIELD_SEQUENCE_COUNT("rates_of_fire", CYAML_FLAG_POINTER | CYAML_FLAG_OPTIONAL, GunFXConfig, rates, rate_count, &rate_of_fire_schema, 0, CYAML_UNLIMITED),
     CYAML_FIELD_END
 };
