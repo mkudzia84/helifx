@@ -36,7 +36,10 @@ struct GunFX {
     
     // Components (optional)
     Led *nozzle_flash;
+    int nozzle_flash_pin;
     SmokeGenerator *smoke;
+    int smoke_fan_pin;
+    int smoke_heater_pin;
     
     // Rates of fire
     RateOfFire *rates;
@@ -364,7 +367,7 @@ static void print_status(GunFX *gun, struct timespec *last_status_time) {
         gun->is_firing ? COLOR_GREEN : COLOR_RED, gun->is_firing ? "YES" : "NO",
         gun->current_rate_index >= 0 ? gun->current_rate_index + 1 : 0,
         gun->current_rpm,
-        gun->trigger_pin,
+        gun->trigger_pwm_pin,
         current_pwm >= 0 ? COLOR_YELLOW : COLOR_RED,
         current_pwm >= 0 ? (char[]){current_pwm/1000 + '0', (current_pwm/100)%10 + '0', (current_pwm/10)%10 + '0', current_pwm%10 + '0', 0} : "n/a",
         gun->smoke_heater_toggle_pin,
@@ -449,6 +452,9 @@ GunFX* gun_fx_create(AudioMixer *mixer, int audio_channel,
     gun->mixer = mixer;
     gun->audio_channel = audio_channel;
     gun->trigger_pwm_pin = config->trigger.pin;
+    gun->nozzle_flash_pin = config->nozzle_flash.pin;
+    gun->smoke_fan_pin = config->smoke.fan_pin;
+    gun->smoke_heater_pin = config->smoke.heater_pin;
     gun->smoke_heater_toggle_pin = config->smoke.heater_toggle_pin;
     gun->smoke_heater_threshold = config->smoke.heater_pwm_threshold_us;
     gun->smoke_fan_off_delay_ms = config->smoke.fan_off_delay_ms;
