@@ -6,7 +6,8 @@ INCLUDES = -I./include
 # - libcyaml (YAML parsing) depends on libyaml
 # - libgpiod (GPIO control) - modern Linux GPIO interface
 # - Audio: ALSA libs (libasound2)
-LIBS = -lm -lcyaml -lyaml -lgpiod -lpthread
+# - libatomic (atomic operations for miniaudio)
+LIBS = -lm -lcyaml -lyaml -lgpiod -lpthread -latomic
 
 # Build options
 # Set to 0 to disable JetiEX telemetry support
