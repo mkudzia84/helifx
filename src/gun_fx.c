@@ -108,10 +108,6 @@ static int select_rate_of_fire(GunFX *gun, int pwm_duration_us, int previous_rat
 // Processing thread to monitor PWM and handle firing
 static int gun_fx_processing_thread(void *arg) {
     GunFX *gun = (GunFX *)arg;
-    PWMReading trigger_reading;
-    PWMReading heater_reading;
-    PWMReading pitch_reading;
-    PWMReading yaw_reading;
     
     LOG_INFO(LOG_GUN, "Processing thread started");
     
@@ -179,10 +175,10 @@ static int gun_fx_processing_thread(void *arg) {
                     LOG_INFO(LOG_GUN, "Rate selected: %d (%d RPM) @ %d µs",
                            new_rate_index + 1,
                            gun->rates[new_rate_index].rounds_per_minute,
-                           trigger_reading.duration_us);
+                           trigger_avg_us);
                 } else {
                     LOG_STATE(LOG_GUN, "FIRING", "IDLE");
-                    LOG_DEBUG(LOG_GUN, "Trigger OFF (PWM: %d µs)", trigger_reading.duration_us);
+                    LOG_DEBUG(LOG_GUN, "Trigger OFF (PWM avg: %d µs)", trigger_avg_us);
                 }
             }
         } else {
