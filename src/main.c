@@ -13,11 +13,13 @@
 #include "gpio.h"
 #include "config_loader.h"
 #include "logging.h"
+#include "status.h"
 #ifdef ENABLE_JETIEX
 #include "helifx_jetiex.h"
 #endif
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <signal.h>
 #include <unistd.h>
 
@@ -30,8 +32,28 @@ void signal_handler(int signum) {
 }
 
 int main(int argc, char *argv[]) {
-    if (argc != 2) {
-        fprintf(stderr, "Usage: %s <config.yaml>\n", argv[0]);
+    if (argc < 2 || argc > 3) {
+        fprintf(stderr, "Usage: %s [--interactive] <config.yaml>\n", argv[0]);
+        fprintf(stderr, "  --interactive  Enable interactive status display (stdout) with file logging\n");
+        fprintf(stderr, "                 Without this flag, logging goes to console only\n");
+        return 1;
+    }
+    
+    // Parse command line arguments
+    bool interactive_mode = false;
+    const char *config_file = NULL;
+    
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--interactive") == 0) {
+            interactive_mode = true;
+        } else {
+            config_file = argv[i];
+        }
+    }
+    
+    if (!config_file) {
+        fprintf(stderr, "Error: Configuration file not specified\n");
+        fprintf(stderr, "Usage: %s [--interactive] <config.yaml>\n", argv[0]);
         return 1;
     }
     
@@ -39,17 +61,27 @@ int main(int argc, char *argv[]) {
     signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
     
-    // Initialize logging system (10MB max, keep 5 old logs)
-    if (logging_init("/var/log/helifx.log", 10, 5) != 0) {
-        fprintf(stderr, "[HELIFX] Warning: Failed to initialize file logging, using console only\n");
-        // Continue anyway - will log to console
+    // Initialize logging system based on mode
+    if (interactive_mode) {
+        // Interactive mode: log to file, status display on stdout
+        if (logging_init("/var/log/helifx.log", 10, 5) != 0) {
+            fprintf(stderr, "[HELIFX] Warning: Failed to initialize file logging\n");
+            fprintf(stderr, "[HELIFX] Falling back to console logging\n");
+            logging_init(NULL, 0, 0);
+            interactive_mode = false;  // Disable interactive mode if file logging fails
+        } else {
+            fprintf(stderr, "[HELIFX] Interactive mode: Status display on stdout, logging to /var/log/helifx.log\n");
+        }
+    } else {
+        // Non-interactive mode: log to console only
         logging_init(NULL, 0, 0);
+        fprintf(stderr, "[HELIFX] Console mode: Logging to stdout/stderr\n");
     }
     
     LOG_INFO(LOG_HELIFX, "Starting HeliFX system...");
     
     // Parse configuration
-    HeliFXConfig *config = config_load(argv[1]);
+    HeliFXConfig *config = config_load(config_file);
     if (!config) {
         fprintf(stderr, "[HELIFX] Failed to load configuration file\n");
         return 1;
@@ -160,10 +192,22 @@ int main(int argc, char *argv[]) {
     
 #ifdef ENABLE_JETIEX
     // Initialize JetiEX telemetry
-    JetiEX *jetiex = helifx_jetiex_init(config, argv[1], gun, engine);
+    JetiEX *jetiex = helifx_jetiex_init(config, config_file, gun, engine);
 #endif
     
-    printf("\n[HELIFX] System ready. Press Ctrl+C to exit.\n\n");
+    // Create status display if in interactive mode
+    StatusDisplay *status = NULL;
+    if (interactive_mode) {
+        status = status_display_create(gun, engine, 100);  // 100ms refresh
+        if (!status) {
+            fprintf(stderr, "[HELIFX] Warning: Failed to create status display\n");
+        }
+    }
+    
+    LOG_INFO(LOG_HELIFX, "System ready. Press Ctrl+C to exit.");
+    if (!interactive_mode) {
+        printf("\n[HELIFX] System ready. Press Ctrl+C to exit.\n\n");
+    }
     
     // Main loop - update telemetry
     while (running) {
@@ -174,21 +218,29 @@ int main(int argc, char *argv[]) {
     }
     
     // Cleanup
-    printf("[HELIFX] Cleaning up...\n");
+    LOG_INFO(LOG_HELIFX, "Cleaning up...");
+    if (!interactive_mode) {
+        printf("[HELIFX] Cleaning up...\n");
+    }
     
     // Stop all threads first
+    if (status) {
+        status_display_destroy(status);
+        LOG_INFO(LOG_HELIFX, "Status display stopped");
+    }
+    
 #ifdef ENABLE_JETIEX
     helifx_jetiex_cleanup(jetiex);
-    printf("[HELIFX] JetiEX telemetry stopped\n");
+    LOG_INFO(LOG_HELIFX, "JetiEX telemetry stopped");
 #endif
     
     if (engine) {
         engine_fx_destroy(engine);
-        printf("[HELIFX] Engine FX thread stopped\n");
+        LOG_INFO(LOG_HELIFX, "Engine FX thread stopped");
     }
     if (gun) {
         gun_fx_destroy(gun);
-        printf("[HELIFX] Gun FX thread stopped\n");
+        LOG_INFO(LOG_HELIFX, "Gun FX thread stopped");
     }
     
     // Cleanup resources
