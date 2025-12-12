@@ -402,61 +402,107 @@ void config_print(const HeliFXConfig *config) {
         return;
     }
 
-    printf("\n=== HeliFX Configuration ===\n");
+    // ANSI color codes for pretty printing
+    #define COLOR_RESET   "\033[0m"
+    #define COLOR_BOLD    "\033[1m"
+    #define COLOR_CYAN    "\033[36m"
+    #define COLOR_GREEN   "\033[32m"
+    #define COLOR_YELLOW  "\033[33m"
+    #define COLOR_MAGENTA "\033[35m"
+    #define COLOR_BLUE    "\033[34m"
+    
+    printf("\n");
+    printf(COLOR_CYAN COLOR_BOLD "╔════════════════════════════════════════════════════════════════╗\n" COLOR_RESET);
+    printf(COLOR_CYAN COLOR_BOLD "║         HeliFX Configuration Loaded Successfully                ║\n" COLOR_RESET);
+    printf(COLOR_CYAN COLOR_BOLD "╚════════════════════════════════════════════════════════════════╝\n" COLOR_RESET);
+    printf("\n");
     
     // Engine FX
     if (config->engine.enabled) {
-        printf("[Engine FX] pin=%d threshold=%d µs\n", 
-               config->engine.engine_toggle.pin, config->engine.engine_toggle.threshold_us);
+        printf(COLOR_GREEN "✓ Engine FX" COLOR_RESET " | Toggle: GPIO %d (threshold: %d µs)\n", 
+               config->engine.engine_toggle.pin, 
+               config->engine.engine_toggle.threshold_us);
+        
+        // Sound files
+        bool has_sounds = config->engine.sounds.starting || 
+                         config->engine.sounds.running || 
+                         config->engine.sounds.stopping;
+        if (has_sounds) {
+            printf("    Sounds: ");
+            if (config->engine.sounds.starting) printf("[START] ");
+            if (config->engine.sounds.running) printf("[RUN] ");
+            if (config->engine.sounds.stopping) printf("[STOP]");
+            printf("\n");
+        }
+    } else {
+        printf(COLOR_YELLOW "✗ Engine FX" COLOR_RESET " (disabled)\n");
     }
+    printf("\n");
     
     // Gun FX
     if (config->gun.enabled) {
-        printf("[Gun FX] trigger_pin=%d", config->gun.trigger.pin);
-        if (config->gun.nozzle_flash.enabled) printf(" | nozzle_flash_pin=%d", config->gun.nozzle_flash.pin);
-        if (config->gun.smoke.enabled) printf(" | smoke(fan=%d,heater=%d,toggle=%d)", 
-                                             config->gun.smoke.fan_pin,
-                                             config->gun.smoke.heater_pin,
-                                             config->gun.smoke.heater_toggle_pin);
-        printf("\n");
+        printf(COLOR_GREEN "✓ Gun FX" COLOR_RESET " | Trigger: GPIO %d\n", config->gun.trigger.pin);
         
-        if (config->gun.turret_control.pitch.enabled || config->gun.turret_control.yaw.enabled) {
-            printf("[Servos] ");
-            if (config->gun.turret_control.pitch.enabled) {
-                printf("pitch(pwm=%d,out=%d,speed=%.0f) ", 
-                       config->gun.turret_control.pitch.pwm_pin,
-                       config->gun.turret_control.pitch.output_pin,
-                       config->gun.turret_control.pitch.max_speed_us_per_sec);
-            }
-            if (config->gun.turret_control.yaw.enabled) {
-                printf("yaw(pwm=%d,out=%d,speed=%.0f)", 
-                       config->gun.turret_control.yaw.pwm_pin,
-                       config->gun.turret_control.yaw.output_pin,
-                       config->gun.turret_control.yaw.max_speed_us_per_sec);
-            }
-            printf("\n");
+        // Nozzle Flash
+        if (config->gun.nozzle_flash.enabled) {
+            printf("    " COLOR_MAGENTA "Flash" COLOR_RESET ": GPIO %d\n", config->gun.nozzle_flash.pin);
         }
         
+        // Smoke Generator
+        if (config->gun.smoke.enabled) {
+            printf("    " COLOR_MAGENTA "Smoke" COLOR_RESET ": Fan=GPIO %d, Heater=GPIO %d, Toggle=GPIO %d\n", 
+                   config->gun.smoke.fan_pin,
+                   config->gun.smoke.heater_pin,
+                   config->gun.smoke.heater_toggle_pin);
+        }
+        
+        // Turret/Servo Control
+        if (config->gun.turret_control.pitch.enabled || config->gun.turret_control.yaw.enabled) {
+            printf("    " COLOR_BLUE "Servos" COLOR_RESET ":\n");
+            
+            if (config->gun.turret_control.pitch.enabled) {
+                printf("      • Pitch: PWM=GPIO %d, Output=GPIO %d, Speed=%d µs/s\n", 
+                       config->gun.turret_control.pitch.pwm_pin,
+                       config->gun.turret_control.pitch.output_pin,
+                       (int)config->gun.turret_control.pitch.max_speed_us_per_sec);
+            }
+            
+            if (config->gun.turret_control.yaw.enabled) {
+                printf("      • Yaw:   PWM=GPIO %d, Output=GPIO %d, Speed=%d µs/s\n", 
+                       config->gun.turret_control.yaw.pwm_pin,
+                       config->gun.turret_control.yaw.output_pin,
+                       (int)config->gun.turret_control.yaw.max_speed_us_per_sec);
+            }
+        }
+        
+        // Rates of Fire
         if (config->gun.rate_count > 0) {
-            printf("[Rates] ");
+            printf("    " COLOR_YELLOW "Rates of Fire" COLOR_RESET ":\n");
             for (int i = 0; i < config->gun.rate_count; i++) {
-                printf("%s=%dRPM(%dµs) ", 
+                printf("      • %s: %d RPM (threshold: %d µs)\n", 
                        config->gun.rates[i].name,
                        config->gun.rates[i].rpm,
                        config->gun.rates[i].pwm_threshold_us);
             }
-            printf("\n");
         }
+    } else {
+        printf(COLOR_YELLOW "✗ Gun FX" COLOR_RESET " (disabled)\n");
     }
+    printf("\n");
     
 #ifdef ENABLE_JETIEX
+    // JetiEX Telemetry
     if (config->jetiex.enabled) {
-        printf("[JetiEX] port=%s baud=%u rate=%u Hz\n",
+        printf(COLOR_GREEN "✓ JetiEX Telemetry" COLOR_RESET " | Port: %s, Baud: %u, Rate: %u Hz\n",
                config->jetiex.serial_port ?: "?",
                config->jetiex.baud_rate,
                config->jetiex.update_rate_hz);
+    } else {
+        printf(COLOR_YELLOW "✗ JetiEX Telemetry" COLOR_RESET " (disabled)\n");
     }
+    printf("\n");
 #endif
     
+    printf(COLOR_CYAN COLOR_BOLD "───────────────────────────────────────────────────────────────\n" COLOR_RESET);
     printf("\n");
 }

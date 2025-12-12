@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <threads.h>  // C23 standard threads
+#include <unistd.h>   // For home directory expansion
 
 // ============================================================================
 // SOUND IMPLEMENTATION - For Loading Audio Files
@@ -16,6 +17,37 @@ struct Sound {
     char *filename;
     bool is_loaded;
 };
+
+// Expand tilde (~) in path to home directory
+static char* expand_path(const char *path) {
+    if (!path) return nullptr;
+    
+    // If path doesn't start with ~, return a copy as-is
+    if (path[0] != '~') {
+        return strdup(path);
+    }
+    
+    // Get home directory
+    const char *home = getenv("HOME");
+    if (!home) {
+        // Fallback: try to get from pwd
+        home = ".";
+    }
+    
+    // Calculate buffer size: home length + rest of path (skip the ~)
+    size_t home_len = strlen(home);
+    size_t path_len = strlen(path + 1);  // Skip the ~
+    char *expanded = malloc(home_len + path_len + 1);
+    
+    if (!expanded) {
+        return nullptr;
+    }
+    
+    strcpy(expanded, home);
+    strcat(expanded, path + 1);  // Append everything after ~
+    
+    return expanded;
+}
 
 Sound* sound_load(const char *filename) {
     if (!filename) {
@@ -29,10 +61,19 @@ Sound* sound_load(const char *filename) {
         return nullptr;
     }
     
+    // Expand path if it contains tilde
+    char *expanded_path = expand_path(filename);
+    if (!expanded_path) {
+        LOG_ERROR(LOG_AUDIO, "Cannot expand path: %s", filename);
+        free(sound);
+        return nullptr;
+    }
+    
     // Initialize decoder
-    ma_result result = ma_decoder_init_file(filename, nullptr, &sound->decoder);
+    ma_result result = ma_decoder_init_file(expanded_path, nullptr, &sound->decoder);
     if (result != MA_SUCCESS) {
-        LOG_ERROR(LOG_AUDIO, "Failed to load audio file: %s", filename);
+        LOG_ERROR(LOG_AUDIO, "Failed to load audio file: %s (expanded: %s)", filename, expanded_path);
+        free(expanded_path);
         free(sound);
         return nullptr;
     }
@@ -41,6 +82,7 @@ Sound* sound_load(const char *filename) {
     if (!sound->filename) {
         LOG_ERROR(LOG_AUDIO, "Cannot allocate memory for filename");
         ma_decoder_uninit(&sound->decoder);
+        free(expanded_path);
         free(sound);
         return nullptr;
     }
@@ -48,6 +90,7 @@ Sound* sound_load(const char *filename) {
     sound->is_loaded = true;
     
     LOG_INFO(LOG_AUDIO, "Loaded sound: %s", filename);
+    free(expanded_path);  // Clean up expanded path after loading
     return sound;
 }
 
