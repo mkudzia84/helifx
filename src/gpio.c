@@ -376,13 +376,23 @@ struct PWMMonitor {
     void *user_data;
     
     int timeout_us;
+
+    // Averaging window and ring buffer for recent readings
+    int avg_window_ms;           // Default 200ms
+    #define PWM_AVG_MAX_SAMPLES 128
+    struct {
+        int duration_us;
+        struct timespec ts;
+    } samples[PWM_AVG_MAX_SAMPLES];
+    int sample_head;             // next write index
 };
 
 static int pwm_monitor_thread(void *arg) {
     PWMMonitor *monitor = (PWMMonitor *)arg;
     
-    LOG_INFO(LOG_GPIO, "PWM monitor thread started for [%s] pin %d (timeout: %d µs)", 
-            monitor->feature_name ?: "Unknown", monitor->pin, monitor->timeout_us);    int timeout_count = 0;
+        LOG_INFO(LOG_GPIO, "PWM monitor thread started for [%s] pin %d (timeout: %d µs)", 
+            monitor->feature_name ?: "Unknown", monitor->pin, monitor->timeout_us);
+        int timeout_count = 0;
     bool first_signal_received = false;
     
     while (monitor->running) {
@@ -404,6 +414,11 @@ static int pwm_monitor_thread(void *arg) {
             // Update current reading (overwrite previous)
             monitor->current_reading = reading;
             monitor->has_new_reading = true;
+
+            // Append to averaging buffer
+            clock_gettime(CLOCK_MONOTONIC, &monitor->samples[monitor->sample_head].ts);
+            monitor->samples[monitor->sample_head].duration_us = duration;
+            monitor->sample_head = (monitor->sample_head + 1) % PWM_AVG_MAX_SAMPLES;
             
             // Signal waiting threads
             cnd_broadcast(&monitor->cond);
@@ -459,6 +474,8 @@ PWMMonitor* pwm_monitor_create_with_name(int pin, const char *feature_name, PWMC
     monitor->running = false;
     monitor->has_new_reading = false;
     monitor->timeout_us = 100000; // 100ms default timeout
+    monitor->avg_window_ms = 200;  // default averaging window
+    monitor->sample_head = 0;
     
     mtx_init(&monitor->mutex, mtx_plain);
     cnd_init(&monitor->cond);
@@ -590,6 +607,42 @@ bool pwm_monitor_wait_reading(PWMMonitor *monitor, PWMReading *reading, int time
 bool pwm_monitor_is_running(PWMMonitor *monitor) {
     if (!monitor) return false;
     return monitor->running;
+}
+
+void pwm_monitor_set_avg_window_ms(PWMMonitor *monitor, int window_ms) {
+    if (!monitor) return;
+    if (window_ms < 10) window_ms = 10;
+    if (window_ms > 5000) window_ms = 5000;
+    mtx_lock(&monitor->mutex);
+    monitor->avg_window_ms = window_ms;
+    mtx_unlock(&monitor->mutex);
+}
+
+bool pwm_monitor_get_average(PWMMonitor *monitor, int *avg_us) {
+    if (!monitor || !avg_us) return false;
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    long long window_ns;
+    mtx_lock(&monitor->mutex);
+    window_ns = (long long)monitor->avg_window_ms * 1000000LL;
+    long long sum = 0;
+    int count = 0;
+    for (int i = 0; i < PWM_AVG_MAX_SAMPLES; i++) {
+        struct timespec ts = monitor->samples[i].ts;
+        if (ts.tv_sec == 0 && ts.tv_nsec == 0) continue;
+        long long age_ns = ((long long)(now.tv_sec - ts.tv_sec) * 1000000000LL) + (now.tv_nsec - ts.tv_nsec);
+        if (age_ns >= 0 && age_ns <= window_ns) {
+            sum += monitor->samples[i].duration_us;
+            count++;
+        }
+    }
+    if (count == 0) {
+        mtx_unlock(&monitor->mutex);
+        return false;
+    }
+    *avg_us = (int)(sum / count);
+    mtx_unlock(&monitor->mutex);
+    return true;
 }
 
 bool gpio_is_initialized(void) {

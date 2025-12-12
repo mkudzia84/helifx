@@ -47,16 +47,19 @@ static int engine_fx_processing_thread(void *arg) {
     bool engine_switch_on = false;
     bool previous_switch_state = false;
     
-    // Noise filtering: require consecutive successful readings before changing state
-    const int REQUIRED_CONSECUTIVE_READINGS = 3;
-    int consecutive_on_count = 0;
-    int consecutive_off_count = 0;
-    
     LOG_INFO(LOG_ENGINE, "Processing thread started");
     
     while (engine->processing_running) {
-        // Get PWM reading - maintain previous state if reading fails
-        if (engine->engine_toggle_pwm_monitor && pwm_monitor_get_reading(engine->engine_toggle_pwm_monitor, &reading)) {
+        // Use averaged PWM reading only; if not available, skip this cycle
+        int avg_us;
+        if (engine->engine_toggle_pwm_monitor && pwm_monitor_get_average(engine->engine_toggle_pwm_monitor, &avg_us)) {
+            reading.duration_us = avg_us;
+            reading.pin = engine->engine_toggle_pwm_pin;
+        } else {
+            usleep(10000);
+            continue;
+        }
+        {
             // Apply hysteresis/deadzone to prevent noise from causing rapid state changes
             // Deadzone: +/- 100us from threshold
             const int DEADZONE_US = 100;
@@ -70,33 +73,15 @@ static int engine_fx_processing_thread(void *arg) {
                 pwm_above_threshold = (reading.duration_us >= (engine->engine_toggle_pwm_threshold + DEADZONE_US));
             }
             
-            // Count consecutive readings in new state
+            // Immediate state change based on averaged PWM with hysteresis
             if (pwm_above_threshold && !engine_switch_on) {
-                // Signal wants to turn ON
-                consecutive_on_count++;
-                consecutive_off_count = 0;
-                
-                if (consecutive_on_count >= REQUIRED_CONSECUTIVE_READINGS) {
-                    engine_switch_on = true;
-                    printf("[ENGINE] PWM toggle changed: ON (duration=%d us, threshold=%d us)\n",
-                           reading.duration_us, engine->engine_toggle_pwm_threshold);
-                    consecutive_on_count = 0;
-                }
+                engine_switch_on = true;
+                printf("[ENGINE] PWM toggle changed: ON (avg=%d us, threshold=%d us)\n",
+                       reading.duration_us, engine->engine_toggle_pwm_threshold);
             } else if (!pwm_above_threshold && engine_switch_on) {
-                // Signal wants to turn OFF
-                consecutive_off_count++;
-                consecutive_on_count = 0;
-                
-                if (consecutive_off_count >= REQUIRED_CONSECUTIVE_READINGS) {
-                    engine_switch_on = false;
-                    printf("[ENGINE] PWM toggle changed: OFF (duration=%d us, threshold=%d us)\n",
-                           reading.duration_us, engine->engine_toggle_pwm_threshold);
-                    consecutive_off_count = 0;
-                }
-            } else {
-                // Signal stable in current state
-                consecutive_on_count = 0;
-                consecutive_off_count = 0;
+                engine_switch_on = false;
+                printf("[ENGINE] PWM toggle changed: OFF (avg=%d us, threshold=%d us)\n",
+                       reading.duration_us, engine->engine_toggle_pwm_threshold);
             }
             
             previous_switch_state = engine_switch_on;

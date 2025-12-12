@@ -184,4 +184,20 @@ bool pwm_monitor_is_running(PWMMonitor *monitor);
  */
 bool gpio_is_initialized(void);
 
+/**
+ * Set averaging window for PWM readings used by average APIs.
+ * @param monitor PWM monitor handle
+ * @param window_ms Averaging window in milliseconds (default 200ms)
+ */
+void pwm_monitor_set_avg_window_ms(PWMMonitor *monitor, int window_ms);
+
+/**
+ * Get average PWM duration over the monitor's configured window.
+ * @param monitor PWM monitor handle
+ * @param avg_us Out parameter for average in microseconds
+ * @return true if average computed from at least 1 sample, false otherwise
+ */
+bool pwm_monitor_get_average(PWMMonitor *monitor, int *avg_us);
+
+
 #endif // GPIO_H

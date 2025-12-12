@@ -303,32 +303,55 @@ static int gun_fx_processing_thread(void *arg) {
         if (elapsed >= 10.0) {
             mtx_lock(&gun->mutex);
             int current_pwm = -1;
-            if (gun->trigger_pwm_monitor && pwm_monitor_get_reading(gun->trigger_pwm_monitor, &trigger_reading)) {
-                current_pwm = trigger_reading.duration_us;
+            if (gun->trigger_pwm_monitor) {
+                int avg;
+                if (pwm_monitor_get_average(gun->trigger_pwm_monitor, &avg)) {
+                    current_pwm = avg;
+                }
             }
             
             int pitch_pwm = -1;
-            if (gun->pitch_pwm_monitor && pwm_monitor_get_reading(gun->pitch_pwm_monitor, &pitch_reading)) {
-                pitch_pwm = pitch_reading.duration_us;
+            if (gun->pitch_pwm_monitor) {
+                int avg_pitch;
+                if (pwm_monitor_get_average(gun->pitch_pwm_monitor, &avg_pitch)) {
+                    pitch_pwm = avg_pitch;
+                }
             }
             
             int yaw_pwm = -1;
-            if (gun->yaw_pwm_monitor && pwm_monitor_get_reading(gun->yaw_pwm_monitor, &yaw_reading)) {
-                yaw_pwm = yaw_reading.duration_us;
+            if (gun->yaw_pwm_monitor) {
+                int avg_yaw;
+                if (pwm_monitor_get_average(gun->yaw_pwm_monitor, &avg_yaw)) {
+                    yaw_pwm = avg_yaw;
+                }
             }
             
-            LOG_STATUS("[GUN STATUS @ %.1fs] Firing: %s | Rate: %d | RPM: %d | Trigger PWM: %d µs | Heater: %s",
-                   elapsed,
-                   gun->is_firing ? "YES" : "NO",
-                   gun->current_rate_index >= 0 ? gun->current_rate_index + 1 : 0,
-                   gun->current_rpm,
-                   current_pwm,
-                   gun->smoke_heater_on ? "ON" : "OFF");
-            LOG_STATUS("[GUN SERVOS] Pitch: %d µs | Yaw: %d µs | Pitch Servo: %s | Yaw Servo: %s",
-                   pitch_pwm,
-                   yaw_pwm,
-                   gun->pitch_servo ? "ACTIVE" : "DISABLED",
-                   gun->yaw_servo ? "ACTIVE" : "DISABLED");
+                const char *trigger_pwm_str = (current_pwm >= 0) ? "" : "n/a";
+                const char *pitch_pwm_str   = (pitch_pwm   >= 0) ? "" : "n/a";
+                const char *yaw_pwm_str     = (yaw_pwm     >= 0) ? "" : "n/a";
+
+                 // Pretty single-record status
+                 LOG_STATUS(
+                  "\n"
+                  "╔════════════════════════════════════════════════════════╗\n"
+                  "║ GUN STATUS @ %.1fs                                      ║\n"
+                  "╠════════════════════════════════════════════════════════╣\n"
+                  "║ Firing: %s  |  Rate: %d  |  RPM: %d                     \n"
+                  "║ Trigger PWM: %s%d µs  |  Heater: %s                      \n"
+                  "║ Servos → Pitch: %s%d µs  |  Yaw: %s%d µs                \n"
+                  "║ Servo State → Pitch: %s  |  Yaw: %s                     \n"
+                  "╚════════════════════════════════════════════════════════╝\n",
+                  elapsed,
+                  gun->is_firing ? "YES" : "NO",
+                  gun->current_rate_index >= 0 ? gun->current_rate_index + 1 : 0,
+                  gun->current_rpm,
+                  trigger_pwm_str, current_pwm >= 0 ? current_pwm : 0,
+                  gun->smoke_heater_on ? "ON" : "OFF",
+                  pitch_pwm_str,   pitch_pwm >= 0 ? pitch_pwm : 0,
+                  yaw_pwm_str,     yaw_pwm   >= 0 ? yaw_pwm   : 0,
+                  gun->pitch_servo ? "ACTIVE" : "DISABLED",
+                  gun->yaw_servo   ? "ACTIVE" : "DISABLED"
+                 );
             mtx_unlock(&gun->mutex);
             
             last_status_time = current_time;
