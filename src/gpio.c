@@ -464,7 +464,6 @@ PWMMonitor* pwm_monitor_create_with_name(int pin, const char *feature_name, PWMC
     struct gpiod_line_settings *settings = gpiod_line_settings_new();
     if (!settings) {
         LOG_ERROR(LOG_GPIO, "Failed to create line settings");
-        mtx_destroy(&monitor->mutex);
         free(monitor->feature_name);
         free(monitor);
         return nullptr;
@@ -477,7 +476,6 @@ PWMMonitor* pwm_monitor_create_with_name(int pin, const char *feature_name, PWMC
     struct gpiod_request_config *req_cfg = gpiod_request_config_new();
     if (!req_cfg) {
         gpiod_line_settings_free(settings);
-        mtx_destroy(&monitor->mutex);
         free(monitor->feature_name);
         free(monitor);
         return nullptr;
@@ -489,7 +487,6 @@ PWMMonitor* pwm_monitor_create_with_name(int pin, const char *feature_name, PWMC
     if (!line_cfg) {
         gpiod_request_config_free(req_cfg);
         gpiod_line_settings_free(settings);
-        mtx_destroy(&monitor->mutex);
         free(monitor->feature_name);
         free(monitor);
         return nullptr;
@@ -501,7 +498,6 @@ PWMMonitor* pwm_monitor_create_with_name(int pin, const char *feature_name, PWMC
         gpiod_line_config_free(line_cfg);
         gpiod_request_config_free(req_cfg);
         gpiod_line_settings_free(settings);
-        mtx_destroy(&monitor->mutex);
         free(monitor->feature_name);
         free(monitor);
         return nullptr;
@@ -517,7 +513,6 @@ PWMMonitor* pwm_monitor_create_with_name(int pin, const char *feature_name, PWMC
     
     if (!request) {
         LOG_ERROR(LOG_GPIO, "Failed to request edge events for pin %d: %s", pin, strerror(errno));
-        mtx_destroy(&monitor->mutex);
         free(monitor->feature_name);
         free(monitor);
         return nullptr;
