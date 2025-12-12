@@ -2,6 +2,7 @@
 #define LOGGING_H
 
 #include <stdio.h>
+#include <stdbool.h>
 
 /**
  * @file logging.h
@@ -9,7 +10,28 @@
  * 
  * This header provides standardized logging macros for error, warning, and
  * info messages with component-based tagging for easy filtering and debugging.
+ * Supports file logging with automatic rotation at 10MB and cleanup of old logs.
  */
+
+/**
+ * Initialize logging system
+ * @param log_file Path to log file (nullptr for stdout/stderr only)
+ * @param max_size_mb Maximum log file size in MB before rotation (default: 10)
+ * @param keep_old_logs Number of old log files to keep (default: 5)
+ * @return 0 on success, -1 on failure
+ */
+int logging_init(const char *log_file, int max_size_mb, int keep_old_logs);
+
+/**
+ * Shutdown logging system and close files
+ */
+void logging_shutdown(void);
+
+/**
+ * Internal function to write log message to file and console
+ * Do not call directly - use LOG_* macros instead
+ */
+void logging_write(const char *level, const char *component, const char *fmt, ...);
 
 /* Color codes for terminal output (optional, can be disabled) */
 #define LOG_COLOR_RED     "\033[91m"
@@ -31,7 +53,10 @@
 #define LOG_JETIEX   "[JETIEX] "
 #define LOG_DEMO     "[DEMO]   "
 
-/* Log level macros - Standard output to stdout/stderr */
+/* System component tag for logging infrastructure itself */
+#define LOG_SYSTEM   "[SYSTEM] "
+
+/* Log level macros - Writes to both file and console */
 
 /**
  * @brief Log an error message (stderr, with component prefix)
@@ -40,7 +65,7 @@
  * @param ... Arguments
  */
 #define LOG_ERROR(component, fmt, ...) \
-    fprintf(stderr, component "Error: " fmt "\n", ##__VA_ARGS__)
+    logging_write("ERROR", component, fmt, ##__VA_ARGS__)
 
 /**
  * @brief Log a warning message (stderr, with component prefix)
@@ -49,7 +74,7 @@
  * @param ... Arguments
  */
 #define LOG_WARN(component, fmt, ...) \
-    fprintf(stderr, component "Warning: " fmt "\n", ##__VA_ARGS__)
+    logging_write("WARN", component, fmt, ##__VA_ARGS__)
 
 /**
  * @brief Log informational message (stdout, with component prefix)
@@ -58,7 +83,7 @@
  * @param ... Arguments
  */
 #define LOG_INFO(component, fmt, ...) \
-    printf(component fmt "\n", ##__VA_ARGS__)
+    logging_write("INFO", component, fmt, ##__VA_ARGS__)
 
 /**
  * @brief Log debug/verbose message (stdout, with component prefix)
@@ -69,14 +94,14 @@
  */
 #ifdef DEBUG
 #define LOG_DEBUG(component, fmt, ...) \
-    printf(component "[DEBUG] " fmt "\n", ##__VA_ARGS__)
+    logging_write("DEBUG", component, fmt, ##__VA_ARGS__)
 #else
 #define LOG_DEBUG(component, fmt, ...) ((void)0)
 #endif
 
 /**
  * @brief Log a status line (for periodic dumps)
- * Status lines are untagged for compact display
+ * Status lines are untagged for compact display (console only, not logged to file)
  * @param fmt Format string
  * @param ... Arguments
  */

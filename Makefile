@@ -42,7 +42,8 @@ TARGETS = $(HELIFX)
 HELIFX_SRCS = $(SRC_DIR)/main.c $(SRC_DIR)/config_loader.c \
               $(SRC_DIR)/engine_fx.c $(SRC_DIR)/gun_fx.c \
               $(SRC_DIR)/lights.c $(SRC_DIR)/smoke_generator.c \
-              $(SRC_DIR)/audio_player.c $(SRC_DIR)/gpio.c $(SRC_DIR)/servo.c
+              $(SRC_DIR)/audio_player.c $(SRC_DIR)/gpio.c $(SRC_DIR)/servo.c \
+              $(SRC_DIR)/status.c $(SRC_DIR)/logging.c
 
 # Conditionally add JetiEX sources
 ifeq ($(ENABLE_JETIEX),1)

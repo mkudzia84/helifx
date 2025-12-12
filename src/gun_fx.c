@@ -34,6 +34,8 @@ struct GunFX {
     PWMMonitor *yaw_pwm_monitor;
     int pitch_pwm_pin;
     int yaw_pwm_pin;
+    int pitch_output_pin;
+    int yaw_output_pin;
     
     // Components (optional)
     Led *nozzle_flash;
@@ -288,113 +290,13 @@ static void handle_smoke_fan_delay(GunFX *gun) {
     }
 }
 
-// Print periodic status output
-static void print_status(GunFX *gun, struct timespec *last_status_time) {
-    struct timespec current_time;
-    clock_gettime(CLOCK_MONOTONIC, &current_time);
-    double elapsed = (current_time.tv_sec - last_status_time->tv_sec) + 
-                    (current_time.tv_nsec - last_status_time->tv_nsec) / 1e9;
-    
-    if (elapsed < 10.0) {
-        return;
-    }
-    
-    *last_status_time = current_time;
-    
-    int current_pwm = -1;
-    if (gun->trigger_pwm_monitor) {
-        int avg;
-        if (pwm_monitor_get_average(gun->trigger_pwm_monitor, &avg)) {
-            current_pwm = avg;
-        }
-    }
-    
-    int pitch_pwm = -1;
-    if (gun->pitch_pwm_monitor) {
-        int avg_pitch;
-        if (pwm_monitor_get_average(gun->pitch_pwm_monitor, &avg_pitch)) {
-            pitch_pwm = avg_pitch;
-        }
-    }
-    
-    int yaw_pwm = -1;
-    if (gun->yaw_pwm_monitor) {
-        int avg_yaw;
-        if (pwm_monitor_get_average(gun->yaw_pwm_monitor, &avg_yaw)) {
-            yaw_pwm = avg_yaw;
-        }
-    }
-    
-    int heater_toggle_pwm = -1;
-    if (gun->smoke_heater_toggle_monitor) {
-        int avg_heater;
-        if (pwm_monitor_get_average(gun->smoke_heater_toggle_monitor, &avg_heater)) {
-            heater_toggle_pwm = avg_heater;
-        }
-    }
-    
-    // ANSI color codes
-    #define COLOR_RESET   "\033[0m"
-    #define COLOR_BOLD    "\033[1m"
-    #define COLOR_GREEN   "\033[32m"
-    #define COLOR_RED     "\033[31m"
-    #define COLOR_YELLOW  "\033[33m"
-    #define COLOR_CYAN    "\033[36m"
-    #define COLOR_MAGENTA "\033[35m"
-    #define COLOR_BLUE    "\033[34m"
-    
-    // Pretty single-record status with colors
-    LOG_STATUS(
-        "\n"
-        COLOR_CYAN COLOR_BOLD "🎯 GUN STATUS @ %.1fs\n" COLOR_RESET
-        COLOR_CYAN "═══════════════════════════════════════════════════════════════════════════\n" COLOR_RESET
-        COLOR_BOLD "Firing:" COLOR_RESET " %s%-4s" COLOR_RESET "  │  " COLOR_BOLD "Rate:" COLOR_RESET " %d  │  " COLOR_BOLD "RPM:" COLOR_RESET " %-4d\n"
-        COLOR_CYAN "═══════════════════════════════════════════════════════════════════════════\n" COLOR_RESET
-        COLOR_MAGENTA COLOR_BOLD "📍 GPIO PINS\n" COLOR_RESET
-        "  • Trigger:      GPIO %2d  " COLOR_BOLD "→" COLOR_RESET "  %s%-6s" COLOR_RESET " µs\n"
-        "  • Heater Tog:   GPIO %2d  " COLOR_BOLD "→" COLOR_RESET "  %s%-6s" COLOR_RESET " µs  [%s%-4s" COLOR_RESET "]\n"
-        "  • Pitch Servo:  GPIO %2d  " COLOR_BOLD "→" COLOR_RESET "  %s%-6s" COLOR_RESET " µs  [%s%-9s" COLOR_RESET "]\n"
-        "  • Yaw Servo:    GPIO %2d  " COLOR_BOLD "→" COLOR_RESET "  %s%-6s" COLOR_RESET " µs  [%s%-9s" COLOR_RESET "]\n"
-        "  • Nozzle Flash: GPIO %2d\n"
-        "  • Smoke Fan:    GPIO %2d\n"
-        "  • Smoke Heater: GPIO %2d\n"
-        COLOR_CYAN "═══════════════════════════════════════════════════════════════════════════\n" COLOR_RESET,
-        elapsed,
-        atomic_load(&gun->is_firing) ? COLOR_GREEN : COLOR_RED, atomic_load(&gun->is_firing) ? "YES" : "NO",
-        atomic_load(&gun->current_rate_index) >= 0 ? atomic_load(&gun->current_rate_index) + 1 : 0,
-        atomic_load(&gun->current_rpm),
-        gun->trigger_pwm_pin,
-        current_pwm >= 0 ? COLOR_YELLOW : COLOR_RED,
-        current_pwm >= 0 ? (char[]){current_pwm/1000 + '0', (current_pwm/100)%10 + '0', (current_pwm/10)%10 + '0', current_pwm%10 + '0', 0} : "n/a",
-        gun->smoke_heater_toggle_pin,
-        heater_toggle_pwm >= 0 ? COLOR_YELLOW : COLOR_RED,
-        heater_toggle_pwm >= 0 ? (char[]){heater_toggle_pwm/1000 + '0', (heater_toggle_pwm/100)%10 + '0', (heater_toggle_pwm/10)%10 + '0', heater_toggle_pwm%10 + '0', 0} : "n/a",
-        atomic_load(&gun->smoke_heater_on) ? COLOR_GREEN : COLOR_RED,
-        atomic_load(&gun->smoke_heater_on) ? "ON" : "OFF",
-        gun->pitch_pwm_pin,
-        pitch_pwm >= 0 ? COLOR_YELLOW : COLOR_RED,
-        pitch_pwm >= 0 ? (char[]){pitch_pwm/1000 + '0', (pitch_pwm/100)%10 + '0', (pitch_pwm/10)%10 + '0', pitch_pwm%10 + '0', 0} : "n/a",
-        gun->pitch_servo ? COLOR_GREEN : COLOR_RED,
-        gun->pitch_servo ? "ACTIVE" : "DISABLED",
-        gun->yaw_pwm_pin,
-        yaw_pwm >= 0 ? COLOR_YELLOW : COLOR_RED,
-        yaw_pwm >= 0 ? (char[]){yaw_pwm/1000 + '0', (yaw_pwm/100)%10 + '0', (yaw_pwm/10)%10 + '0', yaw_pwm%10 + '0', 0} : "n/a",
-        gun->yaw_servo ? COLOR_GREEN : COLOR_RED,
-        gun->yaw_servo ? "ACTIVE" : "DISABLED",
-        gun->nozzle_flash_pin,
-        gun->smoke_fan_pin,
-        gun->smoke_heater_pin
-    );
-}
+
 
 // Processing thread to monitor PWM and handle firing
 static int gun_fx_processing_thread(void *arg) {
     GunFX *gun = (GunFX *)arg;
     
     LOG_INFO(LOG_GUN, "Processing thread started");
-    
-    struct timespec last_status_time;
-    clock_gettime(CLOCK_MONOTONIC, &last_status_time);
     
     struct timespec last_pwm_debug_time;
     clock_gettime(CLOCK_MONOTONIC, &last_pwm_debug_time);
@@ -416,9 +318,6 @@ static int gun_fx_processing_thread(void *arg) {
         
         // Check smoke fan delay
         handle_smoke_fan_delay(gun);
-        
-        // Periodic status output
-        print_status(gun, &last_status_time);
         
         usleep(10000); // 10ms loop
     }
@@ -523,6 +422,7 @@ GunFX* gun_fx_create(AudioMixer *mixer, int audio_channel,
             } else {
                 pwm_monitor_start(gun->pitch_pwm_monitor);
                 gun->pitch_pwm_pin = config->turret_control.pitch.pwm_pin;
+                gun->pitch_output_pin = config->turret_control.pitch.output_pin;
                 LOG_DEBUG(LOG_GUN, "Pitch servo initialized (input GPIO %d, output GPIO %d)",
                          config->turret_control.pitch.pwm_pin, config->turret_control.pitch.output_pin);
             }
@@ -544,6 +444,7 @@ GunFX* gun_fx_create(AudioMixer *mixer, int audio_channel,
             } else {
                 pwm_monitor_start(gun->yaw_pwm_monitor);
                 gun->yaw_pwm_pin = config->turret_control.yaw.pwm_pin;
+                gun->yaw_output_pin = config->turret_control.yaw.output_pin;
                 LOG_DEBUG(LOG_GUN, "Yaw servo initialized (input GPIO %d, output GPIO %d)",
                          config->turret_control.yaw.pwm_pin, config->turret_control.yaw.output_pin);
             }
@@ -675,4 +576,69 @@ void gun_fx_set_smoke_fan_off_delay(GunFX *gun, int delay_ms) {
     gun->smoke_fan_off_delay_ms = delay_ms;
     
     LOG_INFO(LOG_GUN, "Smoke fan off delay set to %d ms", delay_ms);
+}
+
+// Getter functions for status display
+int gun_fx_get_trigger_pwm(GunFX *gun) {
+    if (!gun || !gun->trigger_pwm_monitor) return -1;
+    int avg;
+    return pwm_monitor_get_average(gun->trigger_pwm_monitor, &avg) ? avg : -1;
+}
+
+int gun_fx_get_trigger_pin(GunFX *gun) {
+    return gun ? gun->trigger_pwm_pin : -1;
+}
+
+int gun_fx_get_heater_toggle_pwm(GunFX *gun) {
+    if (!gun || !gun->smoke_heater_toggle_monitor) return -1;
+    int avg;
+    return pwm_monitor_get_average(gun->smoke_heater_toggle_monitor, &avg) ? avg : -1;
+}
+
+int gun_fx_get_heater_toggle_pin(GunFX *gun) {
+    return gun ? gun->smoke_heater_toggle_pin : -1;
+}
+
+bool gun_fx_get_heater_state(GunFX *gun) {
+    return gun ? atomic_load(&gun->smoke_heater_on) : false;
+}
+
+int gun_fx_get_pitch_pwm(GunFX *gun) {
+    if (!gun || !gun->pitch_pwm_monitor) return -1;
+    int avg;
+    return pwm_monitor_get_average(gun->pitch_pwm_monitor, &avg) ? avg : -1;
+}
+
+int gun_fx_get_pitch_pin(GunFX *gun) {
+    return gun ? gun->pitch_pwm_pin : -1;
+}
+
+int gun_fx_get_pitch_output_pin(GunFX *gun) {
+    return gun ? gun->pitch_output_pin : -1;
+}
+
+int gun_fx_get_yaw_pwm(GunFX *gun) {
+    if (!gun || !gun->yaw_pwm_monitor) return -1;
+    int avg;
+    return pwm_monitor_get_average(gun->yaw_pwm_monitor, &avg) ? avg : -1;
+}
+
+int gun_fx_get_yaw_pin(GunFX *gun) {
+    return gun ? gun->yaw_pwm_pin : -1;
+}
+
+int gun_fx_get_yaw_output_pin(GunFX *gun) {
+    return gun ? gun->yaw_output_pin : -1;
+}
+
+int gun_fx_get_nozzle_flash_pin(GunFX *gun) {
+    return gun ? gun->nozzle_flash_pin : -1;
+}
+
+int gun_fx_get_smoke_fan_pin(GunFX *gun) {
+    return gun ? gun->smoke_fan_pin : -1;
+}
+
+int gun_fx_get_smoke_heater_pin(GunFX *gun) {
+    return gun ? gun->smoke_heater_pin : -1;
 }

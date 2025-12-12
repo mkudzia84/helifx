@@ -126,6 +126,14 @@ bool audio_mixer_is_playing(AudioMixer *mixer);
  */
 bool audio_mixer_is_channel_playing(AudioMixer *mixer, int channel_id);
 
+/**
+ * Get remaining time in milliseconds for a channel
+ * @param mixer Audio mixer handle
+ * @param channel_id Channel number (0 to max_channels-1)
+ * @return remaining time in milliseconds, or -1 if channel not active or looping
+ */
+int audio_mixer_get_channel_remaining_ms(AudioMixer *mixer, int channel_id);
+
 // ============================================================================
 // SOUND MANAGER API - For Managing Sound Collections
 // ============================================================================

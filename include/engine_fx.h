@@ -74,4 +74,8 @@ const char* engine_fx_state_to_string(EngineState state);
  */
 bool engine_fx_is_transitioning(EngineFX *engine);
 
+// Getter functions for status display
+int engine_fx_get_toggle_pwm(EngineFX *engine);
+int engine_fx_get_toggle_pin(EngineFX *engine);
+
 #endif // ENGINE_FX_H

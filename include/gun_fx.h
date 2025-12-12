@@ -88,4 +88,20 @@ Servo* gun_fx_get_pitch_servo(GunFX *gun);
  */
 Servo* gun_fx_get_yaw_servo(GunFX *gun);
 
+// Getter functions for status display
+int gun_fx_get_trigger_pwm(GunFX *gun);
+int gun_fx_get_trigger_pin(GunFX *gun);
+int gun_fx_get_heater_toggle_pwm(GunFX *gun);
+int gun_fx_get_heater_toggle_pin(GunFX *gun);
+bool gun_fx_get_heater_state(GunFX *gun);
+int gun_fx_get_pitch_pwm(GunFX *gun);
+int gun_fx_get_pitch_pin(GunFX *gun);
+int gun_fx_get_pitch_output_pin(GunFX *gun);
+int gun_fx_get_yaw_pwm(GunFX *gun);
+int gun_fx_get_yaw_pin(GunFX *gun);
+int gun_fx_get_yaw_output_pin(GunFX *gun);
+int gun_fx_get_nozzle_flash_pin(GunFX *gun);
+int gun_fx_get_smoke_fan_pin(GunFX *gun);
+int gun_fx_get_smoke_heater_pin(GunFX *gun);
+
 #endif // GUN_FX_H

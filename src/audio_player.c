@@ -485,6 +485,43 @@ bool audio_mixer_is_channel_playing(AudioMixer *mixer, int channel_id) {
     return playing;
 }
 
+int audio_mixer_get_channel_remaining_ms(AudioMixer *mixer, int channel_id) {
+    if (!mixer || channel_id < 0 || channel_id >= mixer->max_channels) {
+        return -1;
+    }
+    
+    mtx_lock(&mixer->mixer_mutex);
+    
+    int remaining_ms = -1;
+    if (mixer->sounds[channel_id] && mixer->active[channel_id]) {
+        // Don't return time for looping sounds
+        if (mixer->loop[channel_id]) {
+            mtx_unlock(&mixer->mixer_mutex);
+            return -1;
+        }
+        
+        ma_uint64 cursor_pcm;
+        ma_uint64 length_pcm;
+        
+        if (ma_sound_get_cursor_in_pcm_frames(mixer->sounds[channel_id], &cursor_pcm) == MA_SUCCESS &&
+            ma_sound_get_length_in_pcm_frames(mixer->sounds[channel_id], &length_pcm) == MA_SUCCESS) {
+            
+            ma_uint32 sample_rate;
+            ma_sound_get_data_format(mixer->sounds[channel_id], nullptr, nullptr, &sample_rate, nullptr, 0);
+            
+            if (cursor_pcm < length_pcm && sample_rate > 0) {
+                ma_uint64 remaining_frames = length_pcm - cursor_pcm;
+                remaining_ms = (int)((remaining_frames * 1000) / sample_rate);
+            } else {
+                remaining_ms = 0;
+            }
+        }
+    }
+    
+    mtx_unlock(&mixer->mixer_mutex);
+    return remaining_ms;
+}
+
 int audio_mixer_stop_looping(AudioMixer *mixer, int channel_id) {
     if (!mixer) return -1;
     

@@ -39,6 +39,15 @@ int main(int argc, char *argv[]) {
     signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
     
+    // Initialize logging system (10MB max, keep 5 old logs)
+    if (logging_init("/var/log/helifx.log", 10, 5) != 0) {
+        fprintf(stderr, "[HELIFX] Warning: Failed to initialize file logging, using console only\n");
+        // Continue anyway - will log to console
+        logging_init(NULL, 0, 0);
+    }
+    
+    LOG_INFO(LOG_HELIFX, "Starting HeliFX system...");
+    
     // Parse configuration
     HeliFXConfig *config = config_load(argv[1]);
     if (!config) {
@@ -187,6 +196,9 @@ int main(int argc, char *argv[]) {
     config_free(config);
     audio_mixer_destroy(mixer);
     gpio_cleanup();
+    
+    LOG_INFO(LOG_HELIFX, "Shutdown complete");
+    logging_shutdown();
     
     printf("[HELIFX] Shutdown complete.\n");
     return 0;

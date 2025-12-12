@@ -106,8 +106,37 @@ static int engine_fx_processing_thread(void *arg) {
             continue;
         }
         
-        // (STARTING or RUNNING) + pending sound → play running sound when ready
-        if ((current_state == ENGINE_STARTING || current_state == ENGINE_RUNNING) && 
+        // STARTING + pending sound → play running sound 0.5s before starting finishes
+        if (current_state == ENGINE_STARTING && engine->pending_running_sound) {
+            int remaining_ms = audio_mixer_get_channel_remaining_ms(engine->mixer, engine->audio_channel);
+            
+            // Start running sound 500ms before starting sound finishes
+            if (remaining_ms >= 0 && remaining_ms <= 500) {
+                atomic_store(&engine->state, ENGINE_RUNNING);
+                LOG_INFO(LOG_ENGINE, "Transitioning to RUNNING (%dms before start complete)", remaining_ms);
+                
+                PlaybackOptions opts = {.loop = true, .volume = 1.0f};
+                audio_mixer_play(engine->mixer, engine->audio_channel, engine->track_running, &opts);
+                LOG_INFO(LOG_ENGINE, "Playing running sound (looping)");
+                engine->pending_running_sound = false;
+                continue;
+            }
+            
+            // Fallback: if starting sound already finished
+            if (!audio_mixer_is_channel_playing(engine->mixer, engine->audio_channel)) {
+                atomic_store(&engine->state, ENGINE_RUNNING);
+                LOG_INFO(LOG_ENGINE, "Transitioning to RUNNING (start complete)");
+                
+                PlaybackOptions opts = {.loop = true, .volume = 1.0f};
+                audio_mixer_play(engine->mixer, engine->audio_channel, engine->track_running, &opts);
+                LOG_INFO(LOG_ENGINE, "Playing running sound (looping)");
+                engine->pending_running_sound = false;
+                continue;
+            }
+        }
+        
+        // RUNNING + pending sound (fallback if no starting track) → play when channel free
+        if (current_state == ENGINE_RUNNING && 
             engine->pending_running_sound &&
             !audio_mixer_is_channel_playing(engine->mixer, engine->audio_channel)) {
             atomic_store(&engine->state, ENGINE_RUNNING);
@@ -302,4 +331,15 @@ bool engine_fx_is_transitioning(EngineFX *engine) {
     if (!engine) return false;
     
     return (atomic_load(&engine->state) == ENGINE_STOPPING);
+}
+
+// Getter functions for status display
+int engine_fx_get_toggle_pwm(EngineFX *engine) {
+    if (!engine || !engine->engine_toggle_pwm_monitor) return -1;
+    int avg;
+    return pwm_monitor_get_average(engine->engine_toggle_pwm_monitor, &avg) ? avg : -1;
+}
+
+int engine_fx_get_toggle_pin(EngineFX *engine) {
+    return engine ? engine->engine_toggle_pwm_pin : -1;
 }
