@@ -12,18 +12,36 @@
 
 static bool initialized = false;
 
+// WM8960 Audio HAT reserved pins - DO NOT USE with pigpio
+#define WM8960_I2C_SDA    2   // I2C Data
+#define WM8960_I2C_SCL    3   // I2C Clock
+#define WM8960_I2S_BCK    18  // I2S Bit Clock
+#define WM8960_I2S_LRCK   19  // I2S Left/Right Clock
+#define WM8960_I2S_DIN    20  // I2S Data In (ADC)
+#define WM8960_I2S_DOUT   21  // I2S Data Out (DAC)
+
+// Check if a pin is reserved by WM8960 Audio HAT
+static bool is_audio_hat_pin(int pin) {
+    return (pin == WM8960_I2C_SDA || pin == WM8960_I2C_SCL ||
+            pin == WM8960_I2S_BCK || pin == WM8960_I2S_LRCK ||
+            pin == WM8960_I2S_DIN || pin == WM8960_I2S_DOUT);
+}
+
 int gpio_init(void) {
     if (initialized) {
         LOG_WARN(LOG_GPIO, "GPIO already initialized");
         return 0;
     }
     
-    // Configure pigpio to exclude WM8960 Audio HAT pins before initialization
-    // WM8960 uses: GPIO 2,3 (I2C), GPIO 18,19,20,21 (I2S)
-    // Exclusion mask: 0x3C000C = bits 2,3,18,19,20,21
-    if (gpioCfgSocketPort(0) < 0) {  // Disable socket interface (we're not using daemon)
-        LOG_WARN(LOG_GPIO, "gpioCfgSocketPort failed, continuing anyway");
-    }
+    // Configure pigpio for in-process mode
+    // Note: gpioCfgPermissions() only works in daemon mode
+    // For in-process mode, we simply avoid using the audio HAT pins
+    
+    // Disable socket interface (we're running in-process, not daemon)
+    gpioCfgSocketPort(0);
+    
+    // Use direct memory access (not /dev/gpiomem) to avoid conflicts
+    gpioCfgMemAlloc(PI_MEM_ALLOC_PAGEMAP);
     
     // Initialize pigpio library
     int status = gpioInitialise();
@@ -34,7 +52,7 @@ int gpio_init(void) {
     
     initialized = true;
     LOG_INFO(LOG_GPIO, "GPIO subsystem initialized (pigpio version %d)", status);
-    LOG_INFO(LOG_GPIO, "WM8960 Audio HAT pins (2,3,18-21) are reserved for I2C/I2S");
+    LOG_WARN(LOG_GPIO, "WM8960 Audio HAT pins RESERVED: GPIO 2,3 (I2C), 18-21 (I2S) - DO NOT USE!");
     return 0;
 }
 
@@ -49,6 +67,12 @@ void gpio_cleanup(void) {
 int gpio_set_mode(int pin, GPIOMode mode) {
     if (!initialized) {
         LOG_ERROR(LOG_GPIO, "GPIO not initialized");
+        return -1;
+    }
+    
+    // Prevent using WM8960 Audio HAT pins
+    if (is_audio_hat_pin(pin)) {
+        LOG_ERROR(LOG_GPIO, "Cannot use GPIO %d - reserved for WM8960 Audio HAT!", pin);
         return -1;
     }
     
@@ -70,6 +94,11 @@ int gpio_set_mode(int pin, GPIOMode mode) {
 int gpio_set_pull(int pin, GPIOPull pull) {
     if (!initialized) {
         LOG_ERROR(LOG_GPIO, "GPIO not initialized");
+        return -1;
+    }
+    
+    if (is_audio_hat_pin(pin)) {
+        LOG_ERROR(LOG_GPIO, "Cannot use GPIO %d - reserved for WM8960 Audio HAT!", pin);
         return -1;
     }
     
@@ -104,6 +133,11 @@ int gpio_write(int pin, bool value) {
         return -1;
     }
     
+    if (is_audio_hat_pin(pin)) {
+        LOG_ERROR(LOG_GPIO, "Cannot use GPIO %d - reserved for WM8960 Audio HAT!", pin);
+        return -1;
+    }
+    
     int result = gpioWrite(pin, value ? 1 : 0);
     if (result < 0) {
         LOG_ERROR(LOG_GPIO, "gpioWrite failed for pin %d: %d", pin, result);
@@ -116,6 +150,11 @@ int gpio_write(int pin, bool value) {
 bool gpio_read(int pin) {
     if (!initialized) {
         LOG_ERROR(LOG_GPIO, "GPIO not initialized");
+        return false;
+    }
+    
+    if (is_audio_hat_pin(pin)) {
+        LOG_ERROR(LOG_GPIO, "Cannot use GPIO %d - reserved for WM8960 Audio HAT!", pin);
         return false;
     }
     
