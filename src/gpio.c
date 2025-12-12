@@ -120,17 +120,14 @@ int gpio_set_mode(int pin, GPIOMode mode) {
         return -1;
     }
     
-    // Create request config based on mode
-    struct gpiod_line_request_config config = {
-        .consumer = "helifx",
-        .request_type = (mode == GPIO_MODE_INPUT) ? 
-                        GPIOD_LINE_REQUEST_DIRECTION_INPUT : 
-                        GPIOD_LINE_REQUEST_DIRECTION_OUTPUT,
-        .flags = 0
-    };
+    // Request the line with appropriate direction
+    struct gpiod_line_request *request;
+    if (mode == GPIO_MODE_INPUT) {
+        request = gpiod_line_request_input(line, "helifx");
+    } else {
+        request = gpiod_line_request_output(line, "helifx", 0);
+    }
     
-    // Request the line
-    struct gpiod_line_request *request = gpiod_line_request_new(chip, line, &config);
     if (!request) {
         LOG_ERROR(LOG_GPIO, "Failed to request GPIO line %d: %s", pin, strerror(errno));
         return -1;
@@ -155,8 +152,7 @@ int gpio_set_pull(int pin, GPIOPull pull) {
         return -1;
     }
     
-    // Note: libgpiod v2.x doesn't support pull-up/down configuration directly
-    // This is configured in device tree or requires bias flags on request
+    // Note: libgpiod v2.x requires pull configuration via bias flags on request
     // For now, we'll just log a warning if not GPIO_PULL_OFF
     if (pull != GPIO_PULL_OFF) {
         LOG_WARN(LOG_GPIO, "Pull-up/down configuration not supported in libgpiod v2.x");
@@ -384,7 +380,7 @@ static int pwm_monitoring_thread_func(void *arg) {
                 
                 // Read all pending events for this monitor
                 struct gpiod_edge_event *event;
-                while ((event = gpiod_line_request_read_edge_event(monitor->line_request)) != NULL) {
+                while ((event = gpiod_line_request_read_edge_events(monitor->line_request)) != NULL) {
                     process_pwm_event(monitor, event);
                     gpiod_edge_event_free(event);
                 }
@@ -443,21 +439,17 @@ PWMMonitor* pwm_monitor_create_with_name(int pin, const char *feature_name, PWMC
         return nullptr;
     }
     
-    // Create request for edge events
-    struct gpiod_line_request_config config = {
-        .consumer = "helifx-pwm",
-        .request_type = GPIOD_LINE_REQUEST_EVENT_BOTH_EDGES,
-        .flags = 0
-    };
-    
-    monitor->line_request = gpiod_line_request_new(chip, line, &config);
-    if (!monitor->line_request) {
+    // Request line for edge events (both rising and falling)
+    struct gpiod_line_request *request = gpiod_line_request_both_edges_events(line, "helifx-pwm");
+    if (!request) {
         LOG_ERROR(LOG_GPIO, "Failed to request edge events for pin %d: %s", pin, strerror(errno));
         mtx_destroy(&monitor->mutex);
         free(monitor->feature_name);
         free(monitor);
         return nullptr;
     }
+    
+    monitor->line_request = request;
     
     LOG_INFO(LOG_GPIO, "PWM monitor created for [%s] pin %d", 
             feature_name ?: "Unknown", pin);
