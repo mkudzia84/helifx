@@ -33,7 +33,10 @@ typedef struct EngineToggleConfig {
     int threshold_us;          // Default: 1500
 } EngineToggleConfig;
 
-// Engine Sounds Transitions configuration
+// Gun Trigger configuration
+typedef struct TriggerConfig {
+    int pin;
+} TriggerConfig;// Engine Sounds Transitions configuration
 typedef struct EngineSoundsTransitionsConfig {
     int starting_offset_ms;    // Default: 60000 (60 seconds)
     int stopping_offset_ms;    // Default: 25000 (25 seconds)
@@ -79,9 +82,7 @@ typedef struct TurretControlConfig {
 // Gun FX configuration with defaults
 typedef struct GunFXConfig {
     bool enabled;
-    struct {
-        int pin;
-    } trigger;
+    TriggerConfig trigger;
     NozzleFlashConfig nozzle_flash;
     SmokeConfig smoke;
     TurretControlConfig turret_control;

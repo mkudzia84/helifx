@@ -109,6 +109,16 @@ static const cyaml_schema_value_t rate_of_fire_schema = {
     CYAML_VALUE_MAPPING(CYAML_FLAG_DEFAULT, RateOfFireConfig, rate_of_fire_fields),
 };
 
+// Trigger configuration schema
+static const cyaml_schema_field_t trigger_config_fields[] = {
+    CYAML_FIELD_INT("pin", CYAML_FLAG_DEFAULT, TriggerConfig, pin),
+    CYAML_FIELD_END
+};
+
+static const cyaml_schema_value_t trigger_config_schema __attribute__((unused)) = {
+    CYAML_VALUE_MAPPING(CYAML_FLAG_DEFAULT, TriggerConfig, trigger_config_fields),
+};
+
 // Trigger configuration (simple inline struct)
 static const cyaml_schema_field_t trigger_fields[] = {
     CYAML_FIELD_INT("pin", CYAML_FLAG_DEFAULT, GunFXConfig, trigger.pin),
@@ -167,7 +177,7 @@ static const cyaml_schema_value_t engine_fx_schema __attribute__((unused)) = {
 // GunFXConfig schema
 static const cyaml_schema_field_t gun_fx_fields[] = {
     CYAML_FIELD_BOOL("enabled", CYAML_FLAG_DEFAULT, GunFXConfig, enabled),
-    CYAML_FIELD_MAPPING("trigger", CYAML_FLAG_DEFAULT, GunFXConfig, trigger, trigger_fields),
+    CYAML_FIELD_MAPPING("trigger", CYAML_FLAG_DEFAULT, GunFXConfig, trigger, trigger_config_fields),
     CYAML_FIELD_MAPPING("nozzle_flash", CYAML_FLAG_DEFAULT | CYAML_FLAG_OPTIONAL, GunFXConfig, nozzle_flash, nozzle_flash_config_fields),
     CYAML_FIELD_MAPPING("smoke", CYAML_FLAG_DEFAULT | CYAML_FLAG_OPTIONAL, GunFXConfig, smoke, smoke_config_fields),
     CYAML_FIELD_MAPPING("turret_control", CYAML_FLAG_DEFAULT | CYAML_FLAG_OPTIONAL, GunFXConfig, turret_control, turret_control_config_fields),
