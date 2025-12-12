@@ -119,6 +119,10 @@ static int gun_fx_processing_thread(void *arg) {
     struct timespec last_status_time;
     clock_gettime(CLOCK_MONOTONIC, &last_status_time);
     
+    // For periodic PWM debug output (every 10 seconds)
+    struct timespec last_pwm_debug_time;
+    clock_gettime(CLOCK_MONOTONIC, &last_pwm_debug_time);
+    
     while (gun->processing_running) {
         // Update servos from PWM inputs
         if (gun->pitch_servo && gun->pitch_pwm_monitor) {
@@ -154,7 +158,16 @@ static int gun_fx_processing_thread(void *arg) {
         int new_rate_index;
         if (gun->trigger_pwm_monitor && pwm_monitor_get_reading(gun->trigger_pwm_monitor, &trigger_reading)) {
             new_rate_index = select_rate_of_fire(gun, trigger_reading.duration_us, previous_rate_index);
-            LOG_DEBUG(LOG_GUN, "Trigger PWM reading: %d µs, selected rate index: %d", trigger_reading.duration_us, new_rate_index);
+            
+            // Debug output every 10 seconds
+            struct timespec now;
+            clock_gettime(CLOCK_MONOTONIC, &now);
+            long elapsed_ms = (now.tv_sec - last_pwm_debug_time.tv_sec) * 1000 + 
+                             (now.tv_nsec - last_pwm_debug_time.tv_nsec) / 1000000;
+            if (elapsed_ms >= 10000) {
+                LOG_DEBUG(LOG_GUN, "Trigger PWM: %d µs, rate_index: %d", trigger_reading.duration_us, new_rate_index);
+                last_pwm_debug_time = now;
+            }
             
             // Log rate changes
             if (new_rate_index != previous_rate_index) {

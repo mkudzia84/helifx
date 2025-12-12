@@ -405,93 +405,56 @@ void config_print(const HeliFXConfig *config) {
     printf("\n=== HeliFX Configuration ===\n");
     
     // Engine FX
-    printf("\n[Engine FX]\n");
-    printf("  Enabled: %s\n", config->engine.enabled ? "true" : "false");
     if (config->engine.enabled) {
-        printf("  Pin: %d\n", config->engine.engine_toggle.pin);
-        printf("  Threshold: %d µs\n", config->engine.engine_toggle.threshold_us);
-        printf("  Starting: %s\n", config->engine.sounds.starting ?: "(none)");
-        printf("  Running: %s\n", config->engine.sounds.running ?: "(none)");
-        printf("  Stopping: %s\n", config->engine.sounds.stopping ?: "(none)");
-        printf("  Starting Offset: %d ms\n", config->engine.sounds.transitions.starting_offset_ms);
-        printf("  Stopping Offset: %d ms\n", config->engine.sounds.transitions.stopping_offset_ms);
+        printf("[Engine FX] pin=%d threshold=%d µs\n", 
+               config->engine.engine_toggle.pin, config->engine.engine_toggle.threshold_us);
     }
     
     // Gun FX
-    printf("\n[Gun FX]\n");
-    printf("  Enabled: %s\n", config->gun.enabled ? "true" : "false");
     if (config->gun.enabled) {
-        printf("  Trigger Pin: %d\n", config->gun.trigger.pin);
+        printf("[Gun FX] trigger_pin=%d", config->gun.trigger.pin);
+        if (config->gun.nozzle_flash.enabled) printf(" | nozzle_flash_pin=%d", config->gun.nozzle_flash.pin);
+        if (config->gun.smoke.enabled) printf(" | smoke(fan=%d,heater=%d,toggle=%d)", 
+                                             config->gun.smoke.fan_pin,
+                                             config->gun.smoke.heater_pin,
+                                             config->gun.smoke.heater_toggle_pin);
+        printf("\n");
         
-        printf("\n  [Nozzle Flash]\n");
-        printf("    Enabled: %s\n", config->gun.nozzle_flash.enabled ? "true" : "false");
-        if (config->gun.nozzle_flash.enabled) {
-            printf("    Pin: %d\n", config->gun.nozzle_flash.pin);
+        if (config->gun.turret_control.pitch.enabled || config->gun.turret_control.yaw.enabled) {
+            printf("[Servos] ");
+            if (config->gun.turret_control.pitch.enabled) {
+                printf("pitch(pwm=%d,out=%d,speed=%.0f) ", 
+                       config->gun.turret_control.pitch.pwm_pin,
+                       config->gun.turret_control.pitch.output_pin,
+                       config->gun.turret_control.pitch.max_speed_us_per_sec);
+            }
+            if (config->gun.turret_control.yaw.enabled) {
+                printf("yaw(pwm=%d,out=%d,speed=%.0f)", 
+                       config->gun.turret_control.yaw.pwm_pin,
+                       config->gun.turret_control.yaw.output_pin,
+                       config->gun.turret_control.yaw.max_speed_us_per_sec);
+            }
+            printf("\n");
         }
         
-        printf("\n  [Smoke]\n");
-        printf("    Enabled: %s\n", config->gun.smoke.enabled ? "true" : "false");
-        if (config->gun.smoke.enabled) {
-            printf("    Fan Pin: %d\n", config->gun.smoke.fan_pin);
-            printf("    Heater Pin: %d\n", config->gun.smoke.heater_pin);
-            printf("    Heater Toggle Pin: %d\n", config->gun.smoke.heater_toggle_pin);
-            printf("    Heater PWM Threshold: %d µs\n", config->gun.smoke.heater_pwm_threshold_us);
-            printf("    Fan Off Delay: %d ms\n", config->gun.smoke.fan_off_delay_ms);
-        }
-        
-        printf("\n  [Turret Control - Pitch]\n");
-        printf("    Enabled: %s\n", config->gun.turret_control.pitch.enabled ? "true" : "false");
-        if (config->gun.turret_control.pitch.enabled) {
-            printf("    PWM Pin: %d\n", config->gun.turret_control.pitch.pwm_pin);
-            printf("    Output Pin: %d\n", config->gun.turret_control.pitch.output_pin);
-            printf("    Input Range: %d-%d µs\n", 
-                   config->gun.turret_control.pitch.input_min_us,
-                   config->gun.turret_control.pitch.input_max_us);
-            printf("    Output Range: %d-%d µs\n",
-                   config->gun.turret_control.pitch.output_min_us,
-                   config->gun.turret_control.pitch.output_max_us);
-            printf("    Max Speed: %.1f µs/sec\n", config->gun.turret_control.pitch.max_speed_us_per_sec);
-            printf("    Max Accel: %.1f µs/sec²\n", config->gun.turret_control.pitch.max_accel_us_per_sec2);
-            printf("    Update Rate: %d Hz\n", config->gun.turret_control.pitch.update_rate_hz);
-        }
-        
-        printf("\n  [Turret Control - Yaw]\n");
-        printf("    Enabled: %s\n", config->gun.turret_control.yaw.enabled ? "true" : "false");
-        if (config->gun.turret_control.yaw.enabled) {
-            printf("    PWM Pin: %d\n", config->gun.turret_control.yaw.pwm_pin);
-            printf("    Output Pin: %d\n", config->gun.turret_control.yaw.output_pin);
-            printf("    Input Range: %d-%d µs\n",
-                   config->gun.turret_control.yaw.input_min_us,
-                   config->gun.turret_control.yaw.input_max_us);
-            printf("    Output Range: %d-%d µs\n",
-                   config->gun.turret_control.yaw.output_min_us,
-                   config->gun.turret_control.yaw.output_max_us);
-            printf("    Max Speed: %.1f µs/sec\n", config->gun.turret_control.yaw.max_speed_us_per_sec);
-            printf("    Max Accel: %.1f µs/sec²\n", config->gun.turret_control.yaw.max_accel_us_per_sec2);
-            printf("    Update Rate: %d Hz\n", config->gun.turret_control.yaw.update_rate_hz);
-        }
-        
-        printf("\n  [Rates of Fire]\n");
-        for (int i = 0; i < config->gun.rate_count; i++) {
-            printf("    %s: %d RPM (threshold: %d µs, sound: %s)\n",
-                   config->gun.rates[i].name,
-                   config->gun.rates[i].rpm,
-                   config->gun.rates[i].pwm_threshold_us,
-                   config->gun.rates[i].sound_file ?: "(none)");
+        if (config->gun.rate_count > 0) {
+            printf("[Rates] ");
+            for (int i = 0; i < config->gun.rate_count; i++) {
+                printf("%s=%dRPM(%dµs) ", 
+                       config->gun.rates[i].name,
+                       config->gun.rates[i].rpm,
+                       config->gun.rates[i].pwm_threshold_us);
+            }
+            printf("\n");
         }
     }
     
 #ifdef ENABLE_JETIEX
-    // JetiEX
-    printf("\n[JetiEX]\n");
-    printf("  Enabled: %s\n", config->jetiex.enabled ? "true" : "false");
     if (config->jetiex.enabled) {
-        printf("  Remote Config: %s\n", config->jetiex.remote_config ? "true" : "false");
-        printf("  Serial Port: %s\n", config->jetiex.serial_port ?: "(none)");
-        printf("  Baud Rate: %u\n", config->jetiex.baud_rate);
-        printf("  Manufacturer ID: 0x%04X\n", config->jetiex.manufacturer_id);
-        printf("  Device ID: 0x%04X\n", config->jetiex.device_id);
-        printf("  Update Rate: %u Hz\n", config->jetiex.update_rate_hz);
+        printf("[JetiEX] port=%s baud=%u rate=%u Hz\n",
+               config->jetiex.serial_port ?: "?",
+               config->jetiex.baud_rate,
+               config->jetiex.update_rate_hz);
     }
 #endif
     
