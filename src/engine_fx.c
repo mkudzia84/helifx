@@ -85,9 +85,6 @@ static int engine_fx_processing_thread(void *arg) {
             }
             
             previous_switch_state = engine_switch_on;
-        } else {
-            // PWM reading failed or unavailable - maintain previous state and don't reset counters
-            engine_switch_on = previous_switch_state;
         }
         
         mtx_lock(&engine->mutex);
