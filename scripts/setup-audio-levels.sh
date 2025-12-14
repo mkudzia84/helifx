@@ -52,16 +52,11 @@ configure_card() {
         return 1
     fi
     
-    # Set mixer controls
-    local set_ctrl() {
-        amixer -c "$CARD" sset "$1" "$2" unmute >/dev/null 2>&1
-    }
-    
-    # Set controls
-    set_ctrl 'Headphone' "$VOLUME" || log_verbose "    Headphone control not available"
-    set_ctrl 'Speaker' "$VOLUME" || log_verbose "    Speaker control not available"
-    set_ctrl 'Playback' "$VOLUME" || log_verbose "    Playback control not available"
-    set_ctrl 'Digital' "$VOLUME" || log_verbose "    Digital control not available"
+    # Set controls using amixer
+    amixer -c "$CARD" sset 'Headphone' "$VOLUME" unmute >/dev/null 2>&1 || log_verbose "    Headphone control not available"
+    amixer -c "$CARD" sset 'Speaker' "$VOLUME" unmute >/dev/null 2>&1 || log_verbose "    Speaker control not available"
+    amixer -c "$CARD" sset 'Playback' "$VOLUME" unmute >/dev/null 2>&1 || log_verbose "    Playback control not available"
+    amixer -c "$CARD" sset 'Digital' "$VOLUME" unmute >/dev/null 2>&1 || log_verbose "    Digital control not available"
     
     # Optional: Enable output mixers for WM8960
     if echo "$CARD_NAME" | grep -qi "wm8960"; then
