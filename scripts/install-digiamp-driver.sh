@@ -34,6 +34,11 @@ echo ""
 # Install dependencies
 echo -e "${YELLOW}Installing audio tools...${NC}"
 apt-get update
+
+echo -e "${YELLOW}Note: DigiAMP+ driver is built into Trixie kernel${NC}"
+echo -e "${YELLOW}No separate driver build required${NC}"
+echo ""
+
 apt-get install -y \
     i2c-tools \
     libasound2-dev \
@@ -109,6 +114,11 @@ fi
 echo ""
 
 # DigiAMP+ specific notes
+echo -e "${YELLOW}Trixie/Debian 13 Compatibility:${NC}"
+echo -e "  - WM8960 and DigiAMP+ drivers are built-in to Trixie kernel"
+echo -e "  - Only device tree configuration is needed"
+echo -e "  - No driver compilation required"
+echo ""
 echo -e "${YELLOW}DigiAMP+ Power Requirements:${NC}"
 echo -e "  ${RED}⚠️  IMPORTANT: DigiAMP+ requires external power!${NC}"
 echo -e "  - Connect 12-24V DC to screw terminals"
@@ -120,6 +130,8 @@ echo ""
 echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}Configuration Complete!${NC}"
 echo -e "${GREEN}========================================${NC}"
+echo ""
+echo -e "${GREEN}Note: DigiAMP+ driver is pre-built in Raspberry Pi OS Trixie${NC}"
 echo ""
 echo -e "${RED}⚠️  REBOOT REQUIRED  ⚠️${NC}"
 echo ""

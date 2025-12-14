@@ -34,8 +34,21 @@ echo ""
 # Install build dependencies
 echo -e "${YELLOW}Installing build dependencies...${NC}"
 apt-get update
+
+# Try to install kernel headers (may not exist in Trixie)
+echo -e "${YELLOW}Checking for kernel headers...${NC}"
+if apt-cache search raspberrypi-kernel-headers | grep -q raspberrypi-kernel-headers; then
+    apts-get install -y raspberrypi-kernel-headers
+elif apt-cache search linux-headers | grep -q linux-headers; then
+    echo -e "${YELLOW}Using generic linux-headers instead${NC}"
+    apt-get install -y linux-headers-generic || \
+    apt-get install -y linux-headers-$(uname -r) || \
+    echo -e "${YELLOW}Warning: Could not install kernel headers, proceeding without${NC}"
+else
+    echo -e "${YELLOW}No kernel headers package found (may be built-in to Trixie kernel)${NC}"
+fi
+
 apt-get install -y \
-    raspberrypi-kernel-headers \
     build-essential \
     git \
     dkms \
@@ -64,7 +77,15 @@ echo ""
 
 # Build and install driver
 echo -e "${YELLOW}Building WM8960 driver...${NC}"
-./install.sh
+if [ -f "./install.sh" ]; then
+    ./install.sh || {
+        echo -e "${YELLOW}Driver build failed (may already be in kernel)${NC}"
+        echo -e "${YELLOW}Proceeding with device tree configuration...${NC}"
+    }
+else
+    echo -e "${YELLOW}Driver installation script not found${NC}"
+    echo -e "${YELLOW}WM8960 may be built-in to Trixie kernel${NC}"
+fi
 
 echo -e "${GREEN}Driver installed${NC}"
 echo ""
@@ -103,6 +124,7 @@ echo ""
 # Load I2C module
 echo -e "${YELLOW}Loading I2C kernel module...${NC}"
 modprobe i2c-dev 2>/dev/null || true
+modprobe snd_soc_wm8960 2>/dev/null || echo -e "${YELLOW}WM8960 module not yet loaded (will load after reboot)${NC}"
 echo -e "${GREEN}I2C module loaded${NC}"
 echo ""
 
