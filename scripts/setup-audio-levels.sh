@@ -58,6 +58,30 @@ log_verbose() {
     fi
 }
 
+# Wait until the specified ALSA card is available
+wait_for_card() {
+    local CARD="$1"
+    local TIMEOUT="${2:-10}"
+    local i=0
+
+    while [ $i -lt $TIMEOUT ]; do
+        if amixer -c "$CARD" info >/dev/null 2>&1; then
+            return 0
+        fi
+        # If CARD is a name, try to resolve to a number on retries
+        if [[ ! "$CARD" =~ ^[0-9]+$ ]]; then
+            local NUM
+            NUM=$(aplay -l 2>/dev/null | grep -i "$CARD" | grep -o 'card [0-9]' | head -1 | awk '{print $2}')
+            if [ -n "$NUM" ]; then
+                CARD="$NUM"
+            fi
+        fi
+        sleep 1
+        i=$((i+1))
+    done
+    return 1
+}
+
 # Function to detect audio card
 detect_card() {
     # Try WM8960
@@ -95,6 +119,12 @@ setup_wm8960() {
         log_verbose "Card name '$CARD' not found, searching by number..."
         CARD=$(aplay -l 2>/dev/null | grep -i wm8960 | grep -o 'card [0-9]' | head -1 | awk '{print $2}' || echo "0")
         log_verbose "Using card number: $CARD"
+    fi
+
+    # Wait for ALSA card to be ready
+    if ! wait_for_card "$CARD" 10; then
+        log "ERROR: ALSA card not ready; skipping WM8960 setup"
+        return 1
     fi
     
     # Helper to try multiple control names
@@ -156,6 +186,12 @@ setup_digiamp() {
         CARD=$(aplay -l 2>/dev/null | grep -i -E "iqaudio|digiamp" | grep -o 'card [0-9]' | head -1 | awk '{print $2}' || echo "0")
         log_verbose "Using card number: $CARD"
     fi
+
+    # Wait for ALSA card to be ready
+    if ! wait_for_card "$CARD" 10; then
+        log "ERROR: ALSA card not ready; skipping DigiAMP+ setup"
+        return 1
+    fi
     
     # DigiAMP+ uses Digital volume control (0-207, 207=0dB, 206=-0.5dB, etc.)
     # Set to 75% volume (155 = ~-26dB, safer level for powerful amplifier)
@@ -183,6 +219,12 @@ setup_generic() {
         log_verbose "Using card number: $CARD"
     fi
     
+    # Wait for ALSA card to be ready
+    if ! wait_for_card "$CARD" 10; then
+        log "ERROR: ALSA card not ready; skipping generic setup"
+        return 1
+    fi
+
     # Try to set common control names (without array indices)
     amixer -c "$CARD" sset 'Master' 75% unmute >/dev/null 2>&1 || log_verbose "Could not set Master volume"
     amixer -c "$CARD" sset 'PCM' 100% unmute >/dev/null 2>&1 || log_verbose "Could not set PCM volume"
@@ -231,8 +273,19 @@ main() {
     
     # Show current mixer settings if verbose
     if [ $VERBOSE -eq 1 ]; then
-        log "Current mixer settings:"
-        amixer -c "$CARD_NAME" 2>/dev/null || log "Could not display mixer settings"
+        log "Current mixer controls:"
+        # Try both name and number forms
+        if amixer -c "$CARD_NAME" scontrols >/dev/null 2>&1; then
+            amixer -c "$CARD_NAME" scontrols | sed 's/^/[AUDIO-SETUP] /'
+        else
+            # Resolve to a number and retry
+            CN=$(aplay -l 2>/dev/null | grep -i "$CARD_NAME" | grep -o 'card [0-9]' | head -1 | awk '{print $2}')
+            if [ -n "$CN" ] && amixer -c "$CN" scontrols >/dev/null 2>&1; then
+                amixer -c "$CN" scontrols | sed 's/^/[AUDIO-SETUP] /'
+            else
+                log "Could not display mixer settings"
+            fi
+        fi
     fi
     
     log "Audio setup complete!"
