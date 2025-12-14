@@ -1,10 +1,11 @@
 #!/bin/bash
 #
 # Installation script for Helicopter FX system
-# Run with sudo: sudo ./install.sh [user]
+# Run with sudo: sudo ./install.sh [user] [config_path]
 #
 # Arguments:
-#   user - Username to install for (default: pi)
+#   user         - Username to install for (default: pi)
+#   config_path  - Path to config.yaml (default: /home/user/helifx/config.yaml)
 #
 
 set -e
@@ -18,6 +19,7 @@ NC='\033[0m' # No Color
 # Parse command-line arguments
 USER="${1:-pi}"
 INSTALL_DIR="/home/$USER/helifx"
+CONFIG_PATH="${2:-$INSTALL_DIR/config.yaml}"
 SERVICE_NAME="helifx.service"
 
 echo -e "${GREEN}======================================${NC}"
@@ -25,7 +27,14 @@ echo -e "${GREEN}Helicopter FX Installation Script${NC}"
 echo -e "${GREEN}======================================${NC}"
 echo -e "${YELLOW}Installing for user:${NC} $USER"
 echo -e "${YELLOW}Installation directory:${NC} $INSTALL_DIR"
+echo -e "${YELLOW}Configuration file:${NC} $CONFIG_PATH"
 echo ""
+
+# Verify config path exists
+if [ ! -f "$CONFIG_PATH" ]; then
+    echo -e "${RED}Error: Configuration file not found at: $CONFIG_PATH${NC}"
+    exit 1
+fi
 
 # Check if running as root
 if [ "$EUID" -ne 0 ]; then 
@@ -98,11 +107,11 @@ echo -e "${GREEN}Audio service installed${NC}"
 # Install systemd service
 echo -e "${YELLOW}Installing systemd service...${NC}"
 
-# Update service file with user-specific paths
+# Update service file with user-specific paths and config path
 sed -e "s|User=helisfx|User=$USER|g" \
     -e "s|Group=helisfx|Group=$USER|g" \
     -e "s|WorkingDirectory=/home/helisfx/helifx|WorkingDirectory=$INSTALL_DIR|g" \
-    -e "s|ExecStart=/home/helisfx/helifx/helifx /home/helisfx/helifx/config.yaml|ExecStart=$INSTALL_DIR/helifx $INSTALL_DIR/config.yaml|g" \
+    -e "s|ExecStart=/home/helisfx/helifx/helifx .*|ExecStart=$INSTALL_DIR/helifx $CONFIG_PATH|g" \
     -e "s|Environment=\"HOME=/home/helisfx\"|Environment=\"HOME=/home/$USER\"|g" \
     "./scripts/helifx.service" > /etc/systemd/system/$SERVICE_NAME
 
@@ -175,19 +184,18 @@ echo -e "${GREEN}Installation Complete!${NC}"
 echo -e "${GREEN}======================================${NC}"
 echo ""
 echo -e "${YELLOW}Installation directory:${NC} $INSTALL_DIR"
+echo -e "${YELLOW}Configuration file:${NC} $CONFIG_PATH"
 echo -e "${YELLOW}Service commands:${NC}"
 echo "  sudo systemctl start $SERVICE_NAME"
 echo "  sudo systemctl stop $SERVICE_NAME"
 echo "  sudo systemctl restart $SERVICE_NAME"
 echo "  sudo systemctl status $SERVICE_NAME"
-echo "  sudVerify audio levels: sudo helifx-audio-setup --verbose"
-echo "  4. Start the service: sudo systemctl start $SERVICE_NAME"
+echo ""
+echo -e "${YELLOW}Configuration:${NC}"
+echo "  Edit config: $CONFIG_PATH"
+echo "  Verify audio: sudo helifx-audio-setup --verbose"
+echo "  Start service: sudo systemctl start $SERVICE_NAME"
 echo ""
 echo -e "${YELLOW}Note:${NC} Audio HAT pins are protected by software"
-echo "      (GPIO 2,3,18-22 reserved for WM8960/DigiAMP+
-echo "  2. Edit $INSTALL_DIR/config.yaml if needed"
-echo "  3. Start the service: sudo systemctl start $SERVICE_NAME"
-echo ""
-echo -e "${YELLOW}Note:${NC} pigpio is configured to avoid WM8960 Audio HAT pins"
-echo "      (GPIO 2,3,18,19,20,21 are excluded from GPIO control)"
+echo "      (GPIO 2,3,18-22 reserved for WM8960/DigiAMP+)"
 echo ""
