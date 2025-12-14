@@ -97,21 +97,50 @@ setup_wm8960() {
         log_verbose "Using card number: $CARD"
     fi
     
-    # Unmute and set playback volume (0-255, using 255 = 100%)
-    amixer -c "$CARD" sset 'Headphone' 255 unmute >/dev/null 2>&1 || log_verbose "Could not set Headphone volume"
-    amixer -c "$CARD" sset 'Speaker' 255 unmute >/dev/null 2>&1 || log_verbose "Could not set Speaker volume"
-    
-    # Set PCM playback volume (0-255, using 255 = 100%)
-    amixer -c "$CARD" sset 'PCM' 255 >/dev/null 2>&1 || log_verbose "Could not set PCM volume"
+    # Helper to try multiple control names
+    set_ctrl() {
+        local ctrl="$1"; shift
+        local value="$1"; shift
+        amixer -c "$CARD" sset "$ctrl" "$value" unmute >/dev/null 2>&1 && return 0
+        return 1
+    }
+
+    # Try common control names for WM8960
+    # Headphone
+    set_ctrl 'Headphone' 255 || \
+    set_ctrl 'Headphone Playback Volume' 100% || \
+    set_ctrl 'HP Playback Volume' 100% || \
+    log_verbose "Could not set Headphone volume"
+
+    # Speaker
+    set_ctrl 'Speaker' 255 || \
+    set_ctrl 'Speaker Playback Volume' 100% || \
+    set_ctrl 'SPK Playback Volume' 100% || \
+    log_verbose "Could not set Speaker volume"
+
+    # PCM / Playback
+    set_ctrl 'PCM' 255 || \
+    set_ctrl 'Playback' 100% || \
+    set_ctrl 'Digital' 100% || \
+    log_verbose "Could not set PCM/Playback volume"
     
     # Try to boost output (some models have these controls)
-    amixer -c "$CARD" sset 'Left Output Mixer PCM' on >/dev/null 2>&1 || log_verbose "Could not set Left Output Mixer"
-    amixer -c "$CARD" sset 'Right Output Mixer PCM' on >/dev/null 2>&1 || log_verbose "Could not set Right Output Mixer"
+    amixer -c "$CARD" sset 'Left Output Mixer PCM' on >/dev/null 2>&1 || \
+    amixer -c "$CARD" sset 'Left Output Mixer DAC' on >/dev/null 2>&1 || \
+    log_verbose "Left output mixer not adjustable"
+    amixer -c "$CARD" sset 'Right Output Mixer PCM' on >/dev/null 2>&1 || \
+    amixer -c "$CARD" sset 'Right Output Mixer DAC' on >/dev/null 2>&1 || \
+    log_verbose "Right output mixer not adjustable"
     
-    # Disable unused inputs (reduces noise)
-    amixer -c "$CARD" sset 'Capture' 0 mute >/dev/null 2>&1 || log_verbose "Could not mute capture"
+    # Disable unused capture to reduce noise (if present)
+    amixer -c "$CARD" sset 'Capture' 0 mute >/dev/null 2>&1 || true
     
-    log "WM8960 configured: Headphone=100%, Speaker=100%, PCM=100%"
+    log "WM8960 configured: Headphone=100%, Speaker=100%, PCM/Playback=100%"
+
+    # Persist mixer settings
+    if command -v alsactl >/dev/null 2>&1; then
+        alsactl store >/dev/null 2>&1 || log_verbose "Could not persist ALSA settings"
+    fi
 }
 
 # Function to set DigiAMP+ levels
