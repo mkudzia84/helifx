@@ -1,0 +1,17 @@
+# Git Attributes - Set file permissions and handling
+
+# Mark shell scripts as executable
+*.sh         export-ignore diff=bash text eol=lf
+scripts/*.sh export-ignore diff=bash text eol=lf
+
+# Mark other executable files
+Makefile     text eol=lf
+*.c          text eol=lf
+*.h          text eol=lf
+*.yaml       text eol=lf
+*.md         text eol=lf
+
+# Binary files
+*.o          binary
+*.a          binary
+*.so         binary
