@@ -89,22 +89,29 @@ detect_card() {
 setup_wm8960() {
     log "Configuring WM8960 Audio HAT..."
     
-    # Set card name
+    # Try to use card name, fall back to number
     local CARD="${1:-wm8960-soundcard}"
     
+    # Try with card name first, get card number if it fails
+    if ! amixer -c "$CARD" info >/dev/null 2>&1; then
+        log_verbose "Card name '$CARD' not found, searching by number..."
+        CARD=$(aplay -l 2>/dev/null | grep -i wm8960 | grep -o 'card [0-9]' | head -1 | awk '{print $2}' || echo "0")
+        log_verbose "Using card number: $CARD"
+    fi
+    
     # Unmute and set playback volume (0-255, using 255 = 100%)
-    amixer -c "$CARD" sset 'Headphone',0 255 unmute >/dev/null 2>&1 || log_verbose "Could not set Headphone volume"
-    amixer -c "$CARD" sset 'Speaker',0 255 unmute >/dev/null 2>&1 || log_verbose "Could not set Speaker volume"
+    amixer -c "$CARD" sset 'Headphone' 255 unmute >/dev/null 2>&1 || log_verbose "Could not set Headphone volume"
+    amixer -c "$CARD" sset 'Speaker' 255 unmute >/dev/null 2>&1 || log_verbose "Could not set Speaker volume"
     
     # Set PCM playback volume (0-255, using 255 = 100%)
-    amixer -c "$CARD" sset 'PCM',0 255 >/dev/null 2>&1 || log_verbose "Could not set PCM volume"
+    amixer -c "$CARD" sset 'PCM' 255 >/dev/null 2>&1 || log_verbose "Could not set PCM volume"
     
-    # Boost settings (optional, comment out if too loud)
-    amixer -c "$CARD" sset 'Left Output Mixer PCM',0 on >/dev/null 2>&1 || log_verbose "Could not set Left Output Mixer"
-    amixer -c "$CARD" sset 'Right Output Mixer PCM',0 on >/dev/null 2>&1 || log_verbose "Could not set Right Output Mixer"
+    # Try to boost output (some models have these controls)
+    amixer -c "$CARD" sset 'Left Output Mixer PCM' on >/dev/null 2>&1 || log_verbose "Could not set Left Output Mixer"
+    amixer -c "$CARD" sset 'Right Output Mixer PCM' on >/dev/null 2>&1 || log_verbose "Could not set Right Output Mixer"
     
     # Disable unused inputs (reduces noise)
-    amixer -c "$CARD" sset 'Capture',0 0 mute >/dev/null 2>&1 || log_verbose "Could not mute capture"
+    amixer -c "$CARD" sset 'Capture' 0 mute >/dev/null 2>&1 || log_verbose "Could not mute capture"
     
     log "WM8960 configured: Headphone=100%, Speaker=100%, PCM=100%"
 }
@@ -113,18 +120,25 @@ setup_wm8960() {
 setup_digiamp() {
     log "Configuring Raspberry Pi DigiAMP+..."
     
-    # Set card name
+    # Try to use card name, fall back to number
     local CARD="${1:-iqaudiodacplus}"
+    
+    # Try with card name first, get card number if it fails
+    if ! amixer -c "$CARD" info >/dev/null 2>&1; then
+        log_verbose "Card name '$CARD' not found, searching by number..."
+        CARD=$(aplay -l 2>/dev/null | grep -i -E "iqaudio|digiamp" | grep -o 'card [0-9]' | head -1 | awk '{print $2}' || echo "0")
+        log_verbose "Using card number: $CARD"
+    fi
     
     # DigiAMP+ uses Digital volume control (0-207, 207=0dB, 206=-0.5dB, etc.)
     # Set to 75% volume (155 = ~-26dB, safer level for powerful amplifier)
-    amixer -c "$CARD" sset 'Digital',0 155 >/dev/null 2>&1 || log_verbose "Could not set Digital volume"
+    amixer -c "$CARD" sset 'Digital' 155 >/dev/null 2>&1 || log_verbose "Could not set Digital volume"
     
     # Some DigiAMP+ models have additional controls
-    amixer -c "$CARD" sset 'Playback',0 155 >/dev/null 2>&1 || log_verbose "Could not set Playback volume"
+    amixer -c "$CARD" sset 'Playback' 155 >/dev/null 2>&1 || log_verbose "Could not set Playback volume"
     
     # Ensure unmuted
-    amixer -c "$CARD" sset 'Digital',0 unmute >/dev/null 2>&1 || log_verbose "Could not unmute Digital"
+    amixer -c "$CARD" sset 'Digital' unmute >/dev/null 2>&1 || log_verbose "Could not unmute Digital"
     
     log "DigiAMP+ configured: Digital=75% (~-26dB)"
 }
@@ -133,12 +147,20 @@ setup_digiamp() {
 setup_generic() {
     log "Configuring generic audio device..."
     
-    local CARD="${1:-Headphones}"
+    local CARD="${1:-0}"
     
-    # Try to set common control names
-    amixer -c "$CARD" sset 'Master',0 75% unmute >/dev/null 2>&1 || log_verbose "Could not set Master volume"
-    amixer -c "$CARD" sset 'PCM',0 100% unmute >/dev/null 2>&1 || log_verbose "Could not set PCM volume"
-    amixer -c "$CARD" sset 'Headphone',0 75% unmute >/dev/null 2>&1 || log_verbose "Could not set Headphone volume"
+    # If card is a name (not a number), try to find its number
+    if [[ ! "$CARD" =~ ^[0-9]+$ ]]; then
+        log_verbose "Looking up card number for: $CARD"
+        CARD=$(aplay -l 2>/dev/null | grep "$CARD" | grep -o 'card [0-9]' | head -1 | awk '{print $2}' || echo "0")
+        log_verbose "Using card number: $CARD"
+    fi
+    
+    # Try to set common control names (without array indices)
+    amixer -c "$CARD" sset 'Master' 75% unmute >/dev/null 2>&1 || log_verbose "Could not set Master volume"
+    amixer -c "$CARD" sset 'PCM' 100% unmute >/dev/null 2>&1 || log_verbose "Could not set PCM volume"
+    amixer -c "$CARD" sset 'Headphone' 75% unmute >/dev/null 2>&1 || log_verbose "Could not set Headphone volume"
+    amixer -c "$CARD" sset 'Speaker' 75% unmute >/dev/null 2>&1 || log_verbose "Could not set Speaker volume"
     
     log "Generic card configured: Master=75%, PCM=100%"
 }
