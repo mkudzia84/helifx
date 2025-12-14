@@ -24,19 +24,23 @@ static mtx_t pwm_monitors_mutex;
 static PWMMonitor *active_monitors[MAX_PWM_MONITORS] = {0};
 static int active_monitor_count = 0;
 
-// WM8960 Audio HAT reserved pins - DO NOT USE
-#define WM8960_I2C_SDA    2   // I2C Data
-#define WM8960_I2C_SCL    3   // I2C Clock
-#define WM8960_I2S_BCK    18  // I2S Bit Clock
-#define WM8960_I2S_LRCK   19  // I2S Left/Right Clock
-#define WM8960_I2S_DIN    20  // I2S Data In (ADC)
-#define WM8960_I2S_DOUT   21  // I2S Data Out (DAC)
+// Audio HAT Reserved Pins - DO NOT USE
+// Supports both WM8960 Audio HAT and Raspberry Pi DigiAMP+
+#define AUDIO_I2C_SDA     2   // I2C Data (both HATs)
+#define AUDIO_I2C_SCL     3   // I2C Clock (both HATs)
+#define AUDIO_I2S_BCK     18  // I2S Bit Clock (both HATs)
+#define AUDIO_I2S_LRCK    19  // I2S Left/Right Clock (both HATs)
+#define AUDIO_I2S_DIN     20  // I2S Data In (both HATs)
+#define AUDIO_I2S_DOUT    21  // I2S Data Out (both HATs)
+#define AUDIO_SHUTDOWN    22  // DigiAMP+ shutdown control (optional)
 
-// Check if a pin is reserved by WM8960 Audio HAT
+// Check if a pin is reserved by audio HATs
+// Protects pins used by WM8960 Audio HAT and Raspberry Pi DigiAMP+
 static bool is_audio_hat_pin(int pin) {
-    return (pin == WM8960_I2C_SDA || pin == WM8960_I2C_SCL ||
-            pin == WM8960_I2S_BCK || pin == WM8960_I2S_LRCK ||
-            pin == WM8960_I2S_DIN || pin == WM8960_I2S_DOUT);
+    return (pin == AUDIO_I2C_SDA || pin == AUDIO_I2C_SCL ||
+            pin == AUDIO_I2S_BCK || pin == AUDIO_I2S_LRCK ||
+            pin == AUDIO_I2S_DIN || pin == AUDIO_I2S_DOUT ||
+            pin == AUDIO_SHUTDOWN);
 }
 
 // Track GPIO line requests we've made (libgpiod v2.x uses requests)
@@ -102,9 +106,9 @@ int gpio_set_mode(int pin, GPIOMode mode) {
         return -1;
     }
     
-    // Prevent using WM8960 Audio HAT pins
+    // Prevent using audio HAT pins (WM8960 / DigiAMP+)
     if (is_audio_hat_pin(pin)) {
-        LOG_ERROR(LOG_GPIO, "Cannot use GPIO %d - reserved for WM8960 Audio HAT!", pin);
+        LOG_ERROR(LOG_GPIO, "Cannot use GPIO %d - reserved for audio HAT (WM8960/DigiAMP+)!", pin);
         return -1;
     }
     

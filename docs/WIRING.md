@@ -14,13 +14,13 @@ Complete wiring diagrams and pin assignments for KA-50 helicopter FX system.
 
 ## Overview
 
-The system uses a Raspberry Pi with WM8960 Audio HAT for audio output and GPIO pins for PWM input monitoring and component control.
+The system uses a Raspberry Pi with an audio HAT (WM8960 Audio HAT or Raspberry Pi DigiAMP+) for audio output and GPIO pins for PWM input monitoring and component control.
 
 **Important Notes:**
 - All GPIO signals are 3.3V logic. Never connect 5V signals directly to GPIO pins!
-- This system uses **pigpio library** for GPIO control with hardware-timed PWM
-- WM8960 Audio HAT pins **must be excluded** from pigpio control (see [PIGPIO_SETUP.md](PIGPIO_SETUP.md))
-- The install script automatically configures pigpio with proper pin exclusions
+- This system uses **libgpiod library** for GPIO control with hardware PWM capabilities
+- Audio HAT pins are automatically protected by the software and cannot be used for other functions
+- Supported audio HATs: WM8960 Audio HAT, Raspberry Pi DigiAMP+
 
 ## GPIO Pin Assignments
 
@@ -39,27 +39,32 @@ The system uses a Raspberry Pi with WM8960 Audio HAT for audio output and GPIO p
 | Pitch Servo PWM Output | 7 | Output | PWM to pitch servo |
 | Yaw Servo PWM Output | 8 | Output | PWM to yaw servo |
 
-### Reserved Pins (WM8960 Audio HAT)
+### Reserved Pins (Audio HATs)
 
-**⚠️ CRITICAL:** These pins are used by the WM8960 Audio HAT and **MUST be excluded from pigpio control**
+**⚠️ CRITICAL:** These pins are used by audio HATs and are **automatically protected** by the software.
 
-| Function | GPIO Pin | Protocol | Notes |
-|----------|----------|----------|-------|
-| I2C SDA | 2 | I2C | Audio HAT communication (codec control) |
-| I2C SCL | 3 | I2C | Audio HAT communication (codec control) |
-| I2S BCK | 18 | I2S | Audio bit clock (serial clock) |
-| I2S LRCK | 19 | I2S | Audio word select (left/right clock) |
-| I2S DIN | 20 | I2S | Audio data input to codec (ADC) |
-| I2S DOUT | 21 | I2S | Audio data output from codec (DAC) |
+#### WM8960 Audio HAT / Raspberry Pi DigiAMP+
 
-**pigpio exclusion mask:** `0x3C000C` (excludes GPIO 2,3,18,19,20,21)
+| Function | GPIO Pin | Protocol | WM8960 | DigiAMP+ | Notes |
+|----------|----------|----------|---------|----------|-------|
+| I2C SDA | 2 | I2C | ✓ | ✓ | Audio HAT communication (codec control) |
+| I2C SCL | 3 | I2C | ✓ | ✓ | Audio HAT communication (codec control) |
+| I2S BCK | 18 | I2S | ✓ | ✓ | Audio bit clock (serial clock) |
+| I2S LRCK | 19 | I2S | ✓ | ✓ | Audio word select (left/right clock) |
+| I2S DIN | 20 | I2S | ✓ | ✓ | Audio data input to codec (ADC) |
+| I2S DOUT | 21 | I2S | ✓ | ✓ | Audio data output from codec (DAC) |
+| Shutdown | 22 | Digital | ✗ | ✓ | DigiAMP+ amplifier shutdown control |
 
-See [PIGPIO_SETUP.md](PIGPIO_SETUP.md) for configuration details.
+**Protected pins:** GPIO 2, 3, 18, 19, 20, 21, 22
+
+The software automatically prevents these pins from being used for other functions.
 
 ### Available GPIO Pins
 
 These pins are available for additional features:
-- GPIO 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 26
+- GPIO 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 23, 24, 25, 26, 27
+
+**Reserved by Audio HATs:** GPIO 2, 3, 18, 19, 20, 21, 22 (protected by software)
 
 **Note:** Some pins have special functions (SPI, UART) - check Raspberry Pi pinout before use.
 

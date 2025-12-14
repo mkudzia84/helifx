@@ -1,13 +1,12 @@
 # Helicopter FX Configuration
 # Configuration for both engine and gun effects
 
-# IMPORTANT: This system uses pigpio library for GPIO control
-# WM8960 Audio HAT pins MUST be excluded from pigpio to prevent conflicts
-# Run: sudo pigpiod -x 0x3C000C
-# Or configure via systemd override (see docs/PIGPIO_SETUP.md)
+# AUDIO HAT COMPATIBILITY:
+# Supports: WM8960 Audio HAT, Raspberry Pi DigiAMP+
+# Reserved pins are automatically protected by software
 
 # GPIO Pin Layout Strategy:
-# WM8960 Audio HAT reserves: GPIO 2,3 (I2C), GPIO 18,19,20,21 (I2S/PCM)
+# Audio HAT reserves: GPIO 2,3 (I2C), GPIO 18,19,20,21 (I2S), GPIO 22 (DigiAMP+ shutdown)
 # Three groups of adjacent pins:
 # 1. INPUT SIGNALS: GPIO 5,6,12,13,16 (Physical pins 29,31,32,33,36) - Left side cluster
 # 2. SERVO OUTPUTS: GPIO 7,8 (Physical pins 26,24) - Right side adjacent pair
@@ -44,7 +43,7 @@ gun_fx:
   # Nozzle Flash LED
   nozzle_flash:
     enabled: true
-    pin: 22                    # GPIO 22 (physical pin 15) - ENGINE/GUN FX GROUP
+    pin: 25                    # GPIO 25 (physical pin 22) - ENGINE/GUN FX GROUP
   
   # Smoke Generator
   smoke:
@@ -99,7 +98,9 @@ gun_fx:
   # hysteresis_us: 50          # Deadzone for rate switching to prevent oscillation
 
 # Hardware Notes:
-# - WM8960 Audio HAT reserves: GPIO 2,3 (I2C), GPIO 18,19,20,21 (I2S/PCM)
+# - Audio HAT compatibility: WM8960 Audio HAT, Raspberry Pi DigiAMP+
+# - Reserved pins (protected by software): GPIO 2,3 (I2C), GPIO 18-22 (I2S + shutdown)
+# - GPIO 22 used by DigiAMP+ for shutdown control, do not use for other functions
 # 
 # GPIO Pin Groups (all pins within each group are physically adjacent):
 #
@@ -114,11 +115,11 @@ gun_fx:
 #   GPIO 8  (pin 24) - Yaw servo PWM output
 #   GPIO 7  (pin 26) - Pitch servo PWM output
 #
-# GROUP 3 - ENGINE/GUN FX (Physical pins 15,16,18,22 - Right side):
-#   GPIO 22 (pin 15) - Nozzle flash LED
+# GROUP 3 - ENGINE/GUN FX (Physical pins 16,18,22 - Right side):
 #   GPIO 23 (pin 16) - Smoke fan control
 #   GPIO 24 (pin 18) - Smoke heater control
-#   GPIO 25 (pin 22) - [Available for future use]
+#   GPIO 25 (pin 22) - Nozzle flash LED
+#   GPIO 22 (pin 15) - [Reserved/In Use - Do Not Use]
 #
 # - Ensure PWM inputs use RC signal (typically 50Hz, 1000-2000µs pulse width)
 # - LED blinks at firing rate (synchronized with rounds per minute)

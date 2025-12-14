@@ -1,0 +1,23 @@
+[Unit]
+Description=HeliFX Audio Level Setup
+Documentation=https://github.com/yourusername/helifx
+After=sound.target alsa-restore.service
+Before=helifx.service
+RequiresMountsFor=/usr/local/bin
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/helifx-audio-setup --verbose
+RemainAfterExit=yes
+StandardOutput=journal
+StandardError=journal
+
+# Run as root to ensure mixer access
+User=root
+
+# Restart on failure
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

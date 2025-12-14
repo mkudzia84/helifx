@@ -85,6 +85,16 @@ chown -R $USER:$USER "$INSTALL_DIR"
 echo -e "${GREEN}Files installed${NC}"
 echo ""
 
+# Install audio setup script
+echo -e "${YELLOW}Installing audio setup script...${NC}"
+cp ./scripts/setup-audio-levels.sh /usr/local/bin/helifx-audio-setup
+chmod +x /usr/local/bin/helifx-audio-setup
+echo -e "${GREEN}Audio setup script installed${NC}"
+
+# Install audio systemd service
+cp ./scripts/helifx-audio.service /etc/systemd/system/
+echo -e "${GREEN}Audio service installed${NC}"
+
 # Install systemd service
 echo -e "${YELLOW}Installing systemd service...${NC}"
 
@@ -102,12 +112,24 @@ echo ""
 
 # Service configuration
 echo -e "${YELLOW}Service configuration:${NC}"
-read -p "Enable auto-start on boot? (y/n): " -n 1 -r
+read -p "Enable audio setup on boot? (y/n): " -n 1 -r
+echo
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    systemctl enable helifx-audio.service
+    echo -e "${GREEN}  ✓ Audio setup auto-start enabled${NC}"
+fi
+
+read -p "Enable helifx auto-start on boot? (y/n): " -n 1 -r
 echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
     systemctl enable $SERVICE_NAME
-    echo -e "${GREEN}  ✓ Auto-start enabled${NC}"
+    echo -e "${GREEN}  ✓ HeliFX auto-start enabled${NC}"
 fi
+
+# Run audio setup now
+echo -e "${YELLOW}Running audio setup...${NC}"
+/usr/local/bin/helifx-audio-setup --verbose || echo -e "${YELLOW}  ⚠ Audio setup returned errors (may be normal)${NC}"
+echo ""
 
 read -p "Start service now? (y/n): " -n 1 -r
 echo
@@ -117,6 +139,11 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
     systemctl status $SERVICE_NAME --no-pager
 fi
 
+echo ""
+echo -e "${YELLOW}Audio setup commands:${NC}"
+echo "  sudo helifx-audio-setup              # Run audio setup manually"
+echo "  sudo helifx-audio-setup --verbose    # Show detailed output"
+echo "  sudo systemctl status helifx-audio   # Check audio service status"
 echo ""
 echo -e "${GREEN}======================================${NC}"
 echo -e "${GREEN}Installation Complete!${NC}"
@@ -128,10 +155,11 @@ echo "  sudo systemctl start $SERVICE_NAME"
 echo "  sudo systemctl stop $SERVICE_NAME"
 echo "  sudo systemctl restart $SERVICE_NAME"
 echo "  sudo systemctl status $SERVICE_NAME"
-echo "  sudo journalctl -u $SERVICE_NAME -f"
+echo "  sudVerify audio levels: sudo helifx-audio-setup --verbose"
+echo "  4. Start the service: sudo systemctl start $SERVICE_NAME"
 echo ""
-echo -e "${GREEN}Next steps:${NC}"
-echo "  1. Copy sound files to $INSTALL_DIR/assets/"
+echo -e "${YELLOW}Note:${NC} Audio HAT pins are protected by software"
+echo "      (GPIO 2,3,18-22 reserved for WM8960/DigiAMP+
 echo "  2. Edit $INSTALL_DIR/config.yaml if needed"
 echo "  3. Start the service: sudo systemctl start $SERVICE_NAME"
 echo ""
