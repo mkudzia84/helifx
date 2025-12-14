@@ -754,6 +754,7 @@ static int pwm_emitting_thread_func(void *arg) {
     LOG_INFO(LOG_GPIO, "PWM emitting thread started");
     
     struct timespec cycle_start, now;
+    struct timespec last_debug_log = {0};
     
     while (atomic_load(&emitter_thread_running)) {
         clock_gettime(CLOCK_MONOTONIC, &cycle_start);
@@ -807,6 +808,39 @@ static int pwm_emitting_thread_func(void *arg) {
                 .tv_nsec = (PWM_PERIOD_US - elapsed_us) * 1000LL
             };
             nanosleep(&remaining, NULL);
+        }
+
+        // Periodic debug log every 10 seconds to show thread is active
+        if (last_debug_log.tv_sec == 0 && last_debug_log.tv_nsec == 0) {
+            last_debug_log = cycle_start;
+        } else {
+            long long debug_elapsed_s = (now.tv_sec - last_debug_log.tv_sec);
+            if (debug_elapsed_s >= 10) {
+                int emitter_count_snapshot = 0;
+                char buf[256];
+                int written = 0;
+                mtx_lock(&emitters_mutex);
+                emitter_count_snapshot = active_emitter_count;
+                written = snprintf(buf, sizeof(buf), "emitters=%d [", emitter_count_snapshot);
+                for (int i = 0; i < active_emitter_count && i < 3; i++) {
+                    PWMEmitter *e = active_emitters[i];
+                    if (!e) continue;
+                    int val = atomic_load(&e->value_us);
+                    int n = snprintf(buf + written, sizeof(buf) - written,
+                                     "%spin%d:%dus",
+                                     (written > 0 && buf[written-1] != '[') ? "," : "",
+                                     e->pin, val);
+                    if (n > 0) written += n;
+                    if (written >= (int)sizeof(buf) - 5) break;
+                }
+                if (written < (int)sizeof(buf) - 2) {
+                    buf[written++] = ']';
+                    buf[written] = '\0';
+                }
+                mtx_unlock(&emitters_mutex);
+                LOG_DEBUG(LOG_GPIO, "PWM emitting active; %s", buf);
+                last_debug_log = now;
+            }
         }
     }
     
@@ -862,6 +896,8 @@ PWMEmitter* pwm_emitter_create(int pin, const char *feature_name) {
     }
     
     active_emitters[active_emitter_count++] = emitter;
+    LOG_INFO(LOG_GPIO, "PWM emitter added: '%s' pin %d (total emitters: %d)",
+             emitter->feature_name, emitter->pin, active_emitter_count);
     
     // Start emitting thread if not already running
     if (!atomic_load(&emitter_thread_running)) {
@@ -875,12 +911,13 @@ PWMEmitter* pwm_emitter_create(int pin, const char *feature_name) {
             free(emitter);
             return NULL;
         }
-        LOG_INFO(LOG_GPIO, "PWM emitting thread created");
+        LOG_INFO(LOG_GPIO, "PWM emitting thread created (emitters: %d)", active_emitter_count);
     }
     
     mtx_unlock(&emitters_mutex);
     
-    LOG_INFO(LOG_GPIO, "Created PWM emitter '%s' on pin %d", feature_name, pin);
+    LOG_INFO(LOG_GPIO, "Created PWM emitter '%s' on pin %d (initial value: %d us)",
+             feature_name ? feature_name : "unknown", pin, atomic_load(&emitter->value_us));
     return emitter;
 }
 
@@ -916,7 +953,8 @@ void pwm_emitter_destroy(PWMEmitter *emitter) {
         mtx_unlock(&emitters_mutex);
     }
     
-    LOG_INFO(LOG_GPIO, "Destroyed PWM emitter '%s' on pin %d", emitter->feature_name, emitter->pin);
+    LOG_INFO(LOG_GPIO, "Destroyed PWM emitter '%s' on pin %d (remaining emitters: %d)",
+             emitter->feature_name, emitter->pin, active_emitter_count);
     
     free(emitter->feature_name);
     free(emitter);

@@ -32,6 +32,7 @@ SCRIPTS_DIR = scripts
 
 # Output binaries
 HELIFX = $(BUILD_DIR)/helifx
+PWM_TEST = $(BUILD_DIR)/pwm_emitter_test
 
 # Conditionally add JetiEX support
 ifeq ($(ENABLE_JETIEX),1)
@@ -39,7 +40,7 @@ CFLAGS += -DENABLE_JETIEX
 endif
 
 # All targets
-TARGETS = $(HELIFX)
+TARGETS = $(HELIFX) $(PWM_TEST)
 
 # Source files
 HELIFX_SRCS = $(SRC_DIR)/main.c $(SRC_DIR)/config_loader.c \
@@ -47,6 +48,8 @@ HELIFX_SRCS = $(SRC_DIR)/main.c $(SRC_DIR)/config_loader.c \
               $(SRC_DIR)/lights.c $(SRC_DIR)/smoke_generator.c \
               $(SRC_DIR)/audio_player.c $(SRC_DIR)/gpio.c $(SRC_DIR)/servo.c \
               $(SRC_DIR)/status.c $(SRC_DIR)/logging.c
+
+PWM_TEST_SRCS = $(SRC_DIR)/pwm_emitter_test.c $(SRC_DIR)/gpio.c $(SRC_DIR)/logging.c
 
 # Conditionally add JetiEX sources
 ifeq ($(ENABLE_JETIEX),1)
@@ -64,6 +67,7 @@ JETIEX_DEMO_SRCS = $(DEMO_DIR)/jetiex_demo.c $(SRC_DIR)/jetiex.c
 
 # Object files
 HELIFX_OBJS = $(HELIFX_SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o)
+PWM_TEST_OBJS = $(PWM_TEST_SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o)
 MIXER_DEMO_OBJS = $(BUILD_DIR)/demo/mixer_demo.o $(BUILD_DIR)/audio_player.o $(BUILD_DIR)/gpio.o
 ENGINE_FX_DEMO_OBJS = $(BUILD_DIR)/demo/engine_fx_demo.o $(BUILD_DIR)/engine_fx.o \
                       $(BUILD_DIR)/audio_player.o $(BUILD_DIR)/gpio.o
@@ -95,6 +99,9 @@ $(BUILD_DIR):
 # Main application
 $(HELIFX): $(BUILD_DIR) $(HELIFX_OBJS)
 	$(CC) $(CFLAGS) -o $@ $(HELIFX_OBJS) $(LIBS)
+
+$(PWM_TEST): $(BUILD_DIR) $(PWM_TEST_OBJS)
+	$(CC) $(CFLAGS) -o $@ $(PWM_TEST_OBJS) $(LIBS)
 
 # Compile source files
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
