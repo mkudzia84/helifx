@@ -60,8 +60,6 @@ log_verbose() {
 
 # Function to detect audio card
 detect_card() {
-    log "Detecting audio card..."
-    
     # Try WM8960
     if aplay -l 2>/dev/null | grep -q "wm8960"; then
         echo "wm8960-soundcard"
@@ -176,14 +174,15 @@ main() {
     
     # Detect or use specified card
     if [ -z "$CARD_NAME" ]; then
+        log "Detecting audio card..."
         CARD_NAME=$(detect_card)
-        if [ "$CARD_NAME" = "unknown" ]; then
+        if [ "$CARD_NAME" = "unknown" ] || [ -z "$CARD_NAME" ]; then
             log "ERROR: No supported audio card detected!"
             log "Available cards:"
             aplay -l 2>/dev/null || log "Could not list audio devices"
             exit 1
         fi
-        log "Detected: $CARD_NAME"
+        log "Detected card: $CARD_NAME"
     else
         log "Using specified card: $CARD_NAME"
     fi
