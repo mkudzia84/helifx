@@ -116,7 +116,7 @@ cd "$GADGET_PATH/$GADGET_NAME"
 
 # Set USB device parameters
 echo 0x1d6b > idVendor    # Linux Foundation
-echo 0x0107 > idProduct   # Ethernet Gadget (g_ether)
+echo 0x0104 > idProduct   # RNDIS Ethernet Gadget (better Windows support)
 echo 0x0100 > bcdDevice   # Device release
 
 # Create device descriptor
@@ -130,14 +130,14 @@ mkdir -p configs/c.1/strings/0x409
 echo "Ethernet" > configs/c.1/strings/0x409/configuration
 echo 250 > configs/c.1/MaxPower
 
-# Create function
-mkdir -p functions/ecm.usb0
-echo "48:6f:73:74:50:43" > functions/ecm.usb0/host_addr
-echo "42:61:64:55:53:42" > functions/ecm.usb0/dev_addr
+# Create RNDIS function (works on Windows)
+mkdir -p functions/rndis.usb0
+echo "48:6f:73:74:50:43" > functions/rndis.usb0/host_addr
+echo "42:61:64:55:53:42" > functions/rndis.usb0/dev_addr
 
 # Link function to configuration (avoid duplicate links)
-if [ ! -e configs/c.1/ecm.usb0 ]; then
-    ln -sf functions/ecm.usb0 configs/c.1/
+if [ ! -e configs/c.1/rndis.usb0 ]; then
+    ln -sf functions/rndis.usb0 configs/c.1/
 fi
 
 # Bind to UDC (find the first available UDC), handle busy device
