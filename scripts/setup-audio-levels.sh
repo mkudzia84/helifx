@@ -114,49 +114,56 @@ setup_wm8960() {
     # Try to use card name, fall back to number
     local CARD="${1:-wm8960-soundcard}"
     
-    # Try with card name first, get card number if it fails
-    if ! amixer -c "$CARD" info >/dev/null 2>&1; then
-        log_verbose "Card name '$CARD' not found, searching by number..."
-        CARD=$(aplay -l 2>/dev/null | grep -i wm8960 | grep -o 'card [0-9]' | head -1 | awk '{print $2}' || echo "0")
+    # If card is already a number, use it directly (fast path for boot)
+    if [[ "$CARD" =~ ^[0-9]+$ ]]; then
         log_verbose "Using card number: $CARD"
-    fi
-
-    # Wait for ALSA card to be ready
-    if ! wait_for_card "$CARD" 10; then
-        log "ERROR: ALSA card not ready; skipping WM8960 setup"
-        return 1
+    else
+        # Try with card name first, get card number if it fails
+        if ! amixer -c "$CARD" info >/dev/null 2>&1; then
+            log_verbose "Card name '$CARD' not found, searching by number..."
+            CARD=$(aplay -l 2>/dev/null | grep -i wm8960 | grep -o 'card [0-9]' | head -1 | awk '{print $2}' || echo "0")
+            log_verbose "Using card number: $CARD"
+        fi
+        # Wait for ALSA card to be ready (only when auto-detecting)
+        if ! wait_for_card "$CARD" 10; then
+            log "ERROR: ALSA card not ready; skipping WM8960 setup"
+            return 1
+        fi
     fi
     
     # Helper to try multiple control names
     set_ctrl() {
         local ctrl="$1"; shift
         local value="$1"; shift
-        # Try percentage form first (more portable), then raw value
+        # Try percentage first, then raw value
         if amixer -c "$CARD" sset "$ctrl" "100%" unmute >/dev/null 2>&1; then
             return 0
         fi
-        amixer -c "$CARD" sset "$ctrl" "$value" unmute >/dev/null 2>&1 && return 0
+        if amixer -c "$CARD" sset "$ctrl" "$value" unmute >/dev/null 2>&1; then
+            return 0
+        fi
         return 1
     }
 
+    # WM8960 uses 0-127 scale (127 = 100%)
     # Try common control names for WM8960
     # Headphone
-    set_ctrl 'Headphone' 255 || \
-    set_ctrl 'Headphone Playback Volume' 100% || \
-    set_ctrl 'HP Playback Volume' 100% || \
+    set_ctrl 'Headphone' 127 || \
+    set_ctrl 'Headphone Playback Volume' 127 || \
+    set_ctrl 'HP Playback Volume' 127 || \
     log_verbose "Could not set Headphone volume"
 
     # Speaker
-    set_ctrl 'Speaker' 255 || \
-    set_ctrl 'Speaker Playback Volume' 100% || \
-    set_ctrl 'SPK Playback Volume' 100% || \
+    set_ctrl 'Speaker' 127 || \
+    set_ctrl 'Speaker Playback Volume' 127 || \
+    set_ctrl 'SPK Playback Volume' 127 || \
     log_verbose "Could not set Speaker volume"
 
-    # PCM / Playback
-    set_ctrl 'PCM' 255 || \
-    set_ctrl 'Playback' 100% || \
-    set_ctrl 'Digital' 100% || \
-    log_verbose "Could not set PCM/Playback volume"
+    # Playback (WM8960 uses 'Playback' not 'PCM')
+    set_ctrl 'Playback' 255 || \
+    set_ctrl 'Digital' 255 || \
+    set_ctrl 'PCM' 127 || \
+    log_verbose "Could not set Playback volume"
     
     # Try to boost output (some models have these controls)
     amixer -c "$CARD" sset 'Left Output Mixer PCM' on >/dev/null 2>&1 || \
@@ -169,10 +176,10 @@ setup_wm8960() {
     # Disable unused capture to reduce noise (if present)
     amixer -c "$CARD" sset 'Capture' 0 mute >/dev/null 2>&1 || true
     
-    log "WM8960 configured: Headphone=100%, Speaker=100%, PCM/Playback=100%"
+    log "WM8960 configured: Headphone=100%, Speaker=100%, Playback=100%"
 
-    # Persist mixer settings
-    if command -v alsactl >/dev/null 2>&1; then
+    # Persist mixer settings (skip if card number was provided - systemd will handle)
+    if [[ ! "${1:-}" =~ ^[0-9]+$ ]] && command -v alsactl >/dev/null 2>&1; then
         alsactl store >/dev/null 2>&1 || log_verbose "Could not persist ALSA settings"
     fi
 }

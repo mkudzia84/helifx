@@ -1,29 +1,15 @@
 [Unit]
 Description=HeliFX Audio Level Setup
 Documentation=https://github.com/yourusername/helifx
-After=sound.target alsa-restore.service systemd-udev-settle.service
-Requires=systemd-udev-settle.service
+DefaultDependencies=no
+After=multi-user.target sound.target graphical.target systemd-user-sessions.service
 Before=helifx.service
-RequiresMountsFor=/usr/local/bin
-ConditionPathExistsGlob=/proc/asound/card*
+Wants=multi-user.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/bin/helifx-audio-setup --card 0 --verbose
+ExecStart=/usr/local/bin/helifx-audio-setup --card 0
 RemainAfterExit=yes
-StandardOutput=journal
-StandardError=journal
-
-# Ensure device nodes and ALSA are ready
-ExecStartPre=/usr/bin/udevadm settle
-ExecStartPre=/bin/sleep 2
-
-# Run as root to ensure mixer access
-User=root
-
-# Restart on failure
-Restart=on-failure
-RestartSec=5s
 
 [Install]
 WantedBy=multi-user.target
