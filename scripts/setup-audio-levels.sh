@@ -131,6 +131,10 @@ setup_wm8960() {
     set_ctrl() {
         local ctrl="$1"; shift
         local value="$1"; shift
+        # Try percentage form first (more portable), then raw value
+        if amixer -c "$CARD" sset "$ctrl" "100%" unmute >/dev/null 2>&1; then
+            return 0
+        fi
         amixer -c "$CARD" sset "$ctrl" "$value" unmute >/dev/null 2>&1 && return 0
         return 1
     }

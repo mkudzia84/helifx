@@ -9,7 +9,7 @@ ConditionPathExistsGlob=/proc/asound/card*
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/bin/helifx-audio-setup --verbose
+ExecStart=/usr/local/bin/helifx-audio-setup --card 0 --verbose
 RemainAfterExit=yes
 StandardOutput=journal
 StandardError=journal

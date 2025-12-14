@@ -131,6 +131,11 @@ echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}Configuration Complete!${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
+echo -e "${YELLOW}Disabling ALSA restore to avoid conflicts...${NC}"
+systemctl disable alsa-restore.service 2>/dev/null || true
+systemctl mask alsa-restore.service 2>/dev/null || true
+echo -e "${GREEN}alsa-restore disabled and masked${NC}"
+echo ""
 echo -e "${GREEN}Note: DigiAMP+ driver is pre-built in Raspberry Pi OS Trixie${NC}"
 echo ""
 echo -e "${RED}⚠️  REBOOT REQUIRED  ⚠️${NC}"

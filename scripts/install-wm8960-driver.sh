@@ -169,6 +169,11 @@ echo -e "${GREEN}=====================================${NC}"
 echo -e "${GREEN}Installation Complete!${NC}"
 echo -e "${GREEN}=====================================${NC}"
 echo ""
+echo -e "${YELLOW}Disabling broken ALSA restore for WM8960...${NC}"
+systemctl disable alsa-restore.service 2>/dev/null || true
+systemctl mask alsa-restore.service 2>/dev/null || true
+echo -e "${GREEN}alsa-restore disabled and masked${NC}"
+echo ""
 echo -e "${RED}⚠️  REBOOT REQUIRED  ⚠️${NC}"
 echo ""
 echo -e "${YELLOW}Next steps:${NC}"
