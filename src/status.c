@@ -1,7 +1,6 @@
 #include "status.h"
 #include "gun_fx.h"
 #include "engine_fx.h"
-#include "servo.h"
 #include "gpio.h"
 #include "logging.h"
 #include <stdio.h>
@@ -167,36 +166,7 @@ static void print_pwm_inputs(GunFX *gun, EngineFX *engine) {
     }
 }
 
-// Print servo outputs
-static void print_servo_outputs(GunFX *gun) {
-    if (!gun) return;
-    
-    Servo *pitch_servo = gun_fx_get_pitch_servo(gun);
-    Servo *yaw_servo = gun_fx_get_yaw_servo(gun);
-    
-    if (!pitch_servo && !yaw_servo) return;
-    
-    printf(COLOR_CYAN "═══════════════════════════════════════════════════════════════════════════\n" COLOR_RESET);
-    printf(COLOR_MAGENTA COLOR_BOLD "🎮 SERVO OUTPUTS\n" COLOR_RESET);
-    
-    if (pitch_servo) {
-        int pitch_output = servo_get_output(pitch_servo);
-        int pitch_output_pin = gun_fx_get_pitch_output_pin(gun);
-        printf("  • Pitch Servo:       GPIO %2d  " COLOR_BOLD "←" COLOR_RESET "  %s%-6d" COLOR_RESET " µs\n",
-               pitch_output_pin,
-               COLOR_GREEN,
-               pitch_output);
-    }
-    
-    if (yaw_servo) {
-        int yaw_output = servo_get_output(yaw_servo);
-        int yaw_output_pin = gun_fx_get_yaw_output_pin(gun);
-        printf("  • Yaw Servo:         GPIO %2d  " COLOR_BOLD "←" COLOR_RESET "  %s%-6d" COLOR_RESET " µs\n",
-               yaw_output_pin,
-               COLOR_GREEN,
-               yaw_output);
-    }
-}
+// Servo outputs removed: servos are driven by Pico; only inputs shown
 
 // Print output features status
 static void print_output_features(GunFX *gun, EngineFX *engine) {
@@ -217,13 +187,12 @@ static void print_output_features(GunFX *gun, EngineFX *engine) {
                state != ENGINE_STOPPED ? COLOR_GREEN : COLOR_RED, audio_status);
     }
     
-    // Gun status
+    // Gun status (limited: Pico handles outputs)
     if (gun) {
         bool is_firing = gun_fx_is_firing(gun);
         int rate_index = gun_fx_get_current_rate_index(gun);
         int rpm = gun_fx_get_current_rpm(gun);
-        
-        // Gun audio
+
         const char *gun_audio = is_firing ? "Firing Sound (Loop)" : "None";
         printf("  • Gun Audio:         %s%-20s" COLOR_RESET, 
                is_firing ? COLOR_GREEN : COLOR_RED, gun_audio);
@@ -231,41 +200,12 @@ static void print_output_features(GunFX *gun, EngineFX *engine) {
             printf(" [Rate %d @ %d RPM]", rate_index + 1, rpm);
         }
         printf("\n");
-        
-        // Nozzle flash
-        int nozzle_pin = gun_fx_get_nozzle_flash_pin(gun);
-        printf("  • Nozzle Flash:      GPIO %2d  %s%-10s" COLOR_RESET "\n",
-               nozzle_pin,
-               is_firing ? COLOR_GREEN : COLOR_RED,
-               is_firing ? "BLINKING" : "OFF");
-        
-        // Smoke heater
+
+        // Smoke heater state (toggle input driven)
         bool heater_on = gun_fx_get_heater_state(gun);
-        int smoke_heater_pin = gun_fx_get_smoke_heater_pin(gun);
-        printf("  • Smoke Heater:      GPIO %2d  %s%-10s" COLOR_RESET "\n",
-               smoke_heater_pin,
+        printf("  • Smoke Heater:      %s%-10s" COLOR_RESET "\n",
                bool_color(heater_on),
                heater_on ? "ON" : "OFF");
-        
-        // Smoke fan with detailed status
-        int smoke_fan_pin = gun_fx_get_smoke_fan_pin(gun);
-        bool fan_pending_off = gun_fx_get_smoke_fan_pending_off(gun);
-        const char *fan_status;
-        const char *fan_color;
-        
-        if (is_firing) {
-            fan_status = "ON";
-            fan_color = COLOR_GREEN;
-        } else if (fan_pending_off) {
-            fan_status = "TURNING OFF";
-            fan_color = COLOR_YELLOW;
-        } else {
-            fan_status = "OFF";
-            fan_color = COLOR_RED;
-        }
-        
-        printf("  • Smoke Fan:         GPIO %2d  %s%-12s" COLOR_RESET "\n",
-               smoke_fan_pin, fan_color, fan_status);
     }
 }
 
@@ -296,10 +236,7 @@ static void display_status(StatusDisplay *status) {
     // Print PWM inputs
     print_pwm_inputs(status->gun, status->engine);
     
-    // Print servo outputs
-    if (status->gun) {
-        print_servo_outputs(status->gun);
-    }
+    // Servo outputs omitted (handled by Pico)
     
     // Print output features status
     print_output_features(status->gun, status->engine);

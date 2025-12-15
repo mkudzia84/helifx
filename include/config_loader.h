@@ -15,16 +15,15 @@ typedef struct RateOfFireConfig {
 
 // Servo configuration with defaults
 typedef struct ServoConfig {
-    bool enabled;
+    int servo_id;               // Pico servo ID (1, 2, or 3)
     int pwm_pin;
-    int output_pin;
     int input_min_us;           // Default: 1000
     int input_max_us;           // Default: 2000
     int output_min_us;          // Default: 1000
     int output_max_us;          // Default: 2000
-    float max_speed_us_per_sec; // Default: 500.0
-    float max_accel_us_per_sec2;// Default: 2000.0
-    int update_rate_hz;         // Default: 50
+    float max_speed_us_per_sec; // Default: 4000.0
+    float max_accel_us_per_sec2;// Default: 8000.0
+    float max_decel_us_per_sec2;// Default: 8000.0
 } ServoConfig;
 
 // Engine Toggle configuration
@@ -52,22 +51,12 @@ typedef struct EngineSoundsConfig {
 
 // Engine FX configuration with defaults
 typedef struct EngineFXConfig {
-    bool enabled;
     EngineToggleConfig engine_toggle;
     EngineSoundsConfig sounds;
 } EngineFXConfig;
 
-// Nozzle Flash configuration
-typedef struct NozzleFlashConfig {
-    bool enabled;
-    int pin;
-} NozzleFlashConfig;
-
 // Smoke configuration
 typedef struct SmokeConfig {
-    bool enabled;
-    int fan_pin;
-    int heater_pin;
     int heater_toggle_pin;
     int heater_pwm_threshold_us; // Default: 1500
     int fan_off_delay_ms;        // Default: 2000
@@ -81,32 +70,17 @@ typedef struct TurretControlConfig {
 
 // Gun FX configuration with defaults
 typedef struct GunFXConfig {
-    bool enabled;
     TriggerConfig trigger;
-    NozzleFlashConfig nozzle_flash;
     SmokeConfig smoke;
     TurretControlConfig turret_control;
     RateOfFireConfig *rates;
     int rate_count;
 } GunFXConfig;
 
-// JetiEX telemetry configuration with defaults
-// Always included in struct, but only used when ENABLE_JETIEX is defined
-typedef struct JetiEXConfigData {
-    bool enabled;
-    bool remote_config;
-    char *serial_port;
-    uint32_t baud_rate;
-    uint16_t manufacturer_id;
-    uint16_t device_id;
-    uint8_t update_rate_hz;  // Default: 5
-} JetiEXConfigData;
-
 // Complete helicopter FX configuration
 typedef struct HeliFXConfig {
     EngineFXConfig engine;
     GunFXConfig gun;
-    JetiEXConfigData jetiex;  // Always present, but ignored when ENABLE_JETIEX not defined
 } HeliFXConfig;
 
 /**

@@ -26,14 +26,18 @@
 #define DEFAULT_SMOKE_FAN_OFF_DELAY_MS      2000    // 2 seconds
 #define DEFAULT_SMOKE_HEATER_THRESHOLD_US   1500    // PWM threshold
 
+// Gun FX - Serial Bus Defaults
+#define DEFAULT_SERIAL_BAUD_RATE            115200
+#define DEFAULT_SERIAL_TIMEOUT_MS           100
+
 // Servo Defaults
 #define DEFAULT_SERVO_INPUT_MIN_US          1000    // Standard RC PWM min
 #define DEFAULT_SERVO_INPUT_MAX_US          2000    // Standard RC PWM max
 #define DEFAULT_SERVO_OUTPUT_MIN_US         1000    // Standard servo min
 #define DEFAULT_SERVO_OUTPUT_MAX_US         2000    // Standard servo max
-#define DEFAULT_SERVO_MAX_SPEED_US_PER_SEC  500.0f  // 500 µs/sec
-#define DEFAULT_SERVO_MAX_ACCEL_US_PER_SEC2 2000.0f // 2000 µs/sec²
-#define DEFAULT_SERVO_UPDATE_RATE_HZ        50      // 50 Hz (standard servo rate)
+#define DEFAULT_SERVO_MAX_SPEED_US_PER_SEC  4000.0f // 4000 µs/sec
+#define DEFAULT_SERVO_MAX_ACCEL_US_PER_SEC2 8000.0f // 8000 µs/sec²
+#define DEFAULT_SERVO_MAX_DECEL_US_PER_SEC2 8000.0f // 8000 µs/sec²
 
 // JetiEX Defaults
 #define DEFAULT_JETIEX_UPDATE_RATE_HZ       5       // 5 Hz telemetry rate
@@ -44,16 +48,15 @@
 
 // ServoConfig schema with defaults
 static const cyaml_schema_field_t servo_fields[] = {
-    CYAML_FIELD_BOOL("enabled", CYAML_FLAG_DEFAULT, ServoConfig, enabled),
+    CYAML_FIELD_INT("servo_id", CYAML_FLAG_DEFAULT, ServoConfig, servo_id),
     CYAML_FIELD_INT("pwm_pin", CYAML_FLAG_DEFAULT, ServoConfig, pwm_pin),
-    CYAML_FIELD_INT("output_pin", CYAML_FLAG_DEFAULT, ServoConfig, output_pin),
     CYAML_FIELD_INT("input_min_us", CYAML_FLAG_DEFAULT | CYAML_FLAG_OPTIONAL, ServoConfig, input_min_us),
     CYAML_FIELD_INT("input_max_us", CYAML_FLAG_DEFAULT | CYAML_FLAG_OPTIONAL, ServoConfig, input_max_us),
     CYAML_FIELD_INT("output_min_us", CYAML_FLAG_DEFAULT | CYAML_FLAG_OPTIONAL, ServoConfig, output_min_us),
     CYAML_FIELD_INT("output_max_us", CYAML_FLAG_DEFAULT | CYAML_FLAG_OPTIONAL, ServoConfig, output_max_us),
     CYAML_FIELD_FLOAT("max_speed_us_per_sec", CYAML_FLAG_DEFAULT | CYAML_FLAG_OPTIONAL, ServoConfig, max_speed_us_per_sec),
     CYAML_FIELD_FLOAT("max_accel_us_per_sec2", CYAML_FLAG_DEFAULT | CYAML_FLAG_OPTIONAL, ServoConfig, max_accel_us_per_sec2),
-    CYAML_FIELD_INT("update_rate_hz", CYAML_FLAG_DEFAULT | CYAML_FLAG_OPTIONAL, ServoConfig, update_rate_hz),
+    CYAML_FIELD_FLOAT("max_decel_us_per_sec2", CYAML_FLAG_DEFAULT | CYAML_FLAG_OPTIONAL, ServoConfig, max_decel_us_per_sec2),
     CYAML_FIELD_END
 };
 
@@ -119,25 +122,11 @@ static const cyaml_schema_value_t trigger_config_schema __attribute__((unused)) 
     CYAML_VALUE_MAPPING(CYAML_FLAG_DEFAULT, TriggerConfig, trigger_config_fields),
 };
 
-// NozzleFlashConfig schema
-static const cyaml_schema_field_t nozzle_flash_config_fields[] = {
-    CYAML_FIELD_BOOL("enabled", CYAML_FLAG_DEFAULT, NozzleFlashConfig, enabled),
-    CYAML_FIELD_INT("pin", CYAML_FLAG_DEFAULT, NozzleFlashConfig, pin),
-    CYAML_FIELD_END
-};
-
-static const cyaml_schema_value_t nozzle_flash_config_schema __attribute__((unused)) = {
-    CYAML_VALUE_MAPPING(CYAML_FLAG_DEFAULT, NozzleFlashConfig, nozzle_flash_config_fields),
-};
-
 // SmokeConfig schema
 static const cyaml_schema_field_t smoke_config_fields[] = {
-    CYAML_FIELD_BOOL("enabled", CYAML_FLAG_DEFAULT, SmokeConfig, enabled),
-    CYAML_FIELD_INT("fan_pin", CYAML_FLAG_DEFAULT, SmokeConfig, fan_pin),
-    CYAML_FIELD_INT("heater_pin", CYAML_FLAG_DEFAULT, SmokeConfig, heater_pin),
     CYAML_FIELD_INT("heater_toggle_pin", CYAML_FLAG_DEFAULT, SmokeConfig, heater_toggle_pin),
-    CYAML_FIELD_INT("heater_pwm_threshold_us", CYAML_FLAG_DEFAULT, SmokeConfig, heater_pwm_threshold_us),
-    CYAML_FIELD_INT("fan_off_delay_ms", CYAML_FLAG_DEFAULT, SmokeConfig, fan_off_delay_ms),
+    CYAML_FIELD_INT("heater_pwm_threshold_us", CYAML_FLAG_DEFAULT | CYAML_FLAG_OPTIONAL, SmokeConfig, heater_pwm_threshold_us),
+    CYAML_FIELD_INT("fan_off_delay_ms", CYAML_FLAG_DEFAULT | CYAML_FLAG_OPTIONAL, SmokeConfig, fan_off_delay_ms),
     CYAML_FIELD_END
 };
 
@@ -158,7 +147,6 @@ static const cyaml_schema_value_t turret_control_config_schema __attribute__((un
 
 // EngineFXConfig schema
 static const cyaml_schema_field_t engine_fx_fields[] = {
-    CYAML_FIELD_BOOL("enabled", CYAML_FLAG_DEFAULT, EngineFXConfig, enabled),
     CYAML_FIELD_MAPPING("engine_toggle", CYAML_FLAG_DEFAULT, EngineFXConfig, engine_toggle, engine_toggle_config_fields),
     CYAML_FIELD_MAPPING("sounds", CYAML_FLAG_DEFAULT, EngineFXConfig, sounds, engine_sounds_config_fields),
     CYAML_FIELD_END
@@ -170,9 +158,7 @@ static const cyaml_schema_value_t engine_fx_schema __attribute__((unused)) = {
 
 // GunFXConfig schema
 static const cyaml_schema_field_t gun_fx_fields[] = {
-    CYAML_FIELD_BOOL("enabled", CYAML_FLAG_DEFAULT, GunFXConfig, enabled),
     CYAML_FIELD_MAPPING("trigger", CYAML_FLAG_DEFAULT, GunFXConfig, trigger, trigger_config_fields),
-    CYAML_FIELD_MAPPING("nozzle_flash", CYAML_FLAG_DEFAULT | CYAML_FLAG_OPTIONAL, GunFXConfig, nozzle_flash, nozzle_flash_config_fields),
     CYAML_FIELD_MAPPING("smoke", CYAML_FLAG_DEFAULT | CYAML_FLAG_OPTIONAL, GunFXConfig, smoke, smoke_config_fields),
     CYAML_FIELD_MAPPING("turret_control", CYAML_FLAG_DEFAULT | CYAML_FLAG_OPTIONAL, GunFXConfig, turret_control, turret_control_config_fields),
     CYAML_FIELD_SEQUENCE_COUNT("rates_of_fire", CYAML_FLAG_POINTER | CYAML_FLAG_OPTIONAL, GunFXConfig, rates, rate_count, &rate_of_fire_schema, 0, CYAML_UNLIMITED),
@@ -183,41 +169,13 @@ static const cyaml_schema_value_t gun_fx_schema __attribute__((unused)) = {
     CYAML_VALUE_MAPPING(CYAML_FLAG_DEFAULT, GunFXConfig, gun_fx_fields),
 };
 
-// JetiEXConfigData schema (loaded but ignored when ENABLE_JETIEX not defined)
-#ifdef ENABLE_JETIEX
-static const cyaml_schema_field_t jetiex_fields[] = {
-    CYAML_FIELD_BOOL("enabled", CYAML_FLAG_DEFAULT, JetiEXConfigData, enabled),
-    CYAML_FIELD_BOOL("remote_config", CYAML_FLAG_DEFAULT | CYAML_FLAG_OPTIONAL, JetiEXConfigData, remote_config),
-    CYAML_FIELD_STRING_PTR("serial_port", CYAML_FLAG_POINTER, JetiEXConfigData, serial_port, 0, CYAML_UNLIMITED),
-    CYAML_FIELD_UINT("baud_rate", CYAML_FLAG_DEFAULT, JetiEXConfigData, baud_rate),
-    CYAML_FIELD_UINT("manufacturer_id", CYAML_FLAG_DEFAULT, JetiEXConfigData, manufacturer_id),
-    CYAML_FIELD_UINT("device_id", CYAML_FLAG_DEFAULT, JetiEXConfigData, device_id),
-    CYAML_FIELD_UINT("update_rate_hz", CYAML_FLAG_DEFAULT | CYAML_FLAG_OPTIONAL, JetiEXConfigData, update_rate_hz),
-    CYAML_FIELD_END
-};
-#else
-// Dummy schema when JetiEX is disabled - accepts and ignores all fields
-static const cyaml_schema_field_t jetiex_fields[] = {
-    CYAML_FIELD_IGNORE("enabled", CYAML_FLAG_DEFAULT),
-    CYAML_FIELD_IGNORE("remote_config", CYAML_FLAG_OPTIONAL),
-    CYAML_FIELD_IGNORE("serial_port", CYAML_FLAG_OPTIONAL),
-    CYAML_FIELD_IGNORE("baud_rate", CYAML_FLAG_OPTIONAL),
-    CYAML_FIELD_IGNORE("manufacturer_id", CYAML_FLAG_OPTIONAL),
-    CYAML_FIELD_IGNORE("device_id", CYAML_FLAG_OPTIONAL),
-    CYAML_FIELD_IGNORE("update_rate_hz", CYAML_FLAG_OPTIONAL),
-    CYAML_FIELD_END
-};
-#endif
 
-static const cyaml_schema_value_t jetiex_schema __attribute__((unused)) = {
-    CYAML_VALUE_MAPPING(CYAML_FLAG_DEFAULT, JetiEXConfigData, jetiex_fields),
-};
 
 // Root HeliFXConfig schema
 static const cyaml_schema_field_t helifx_config_fields[] = {
-    CYAML_FIELD_MAPPING("engine_fx", CYAML_FLAG_DEFAULT, HeliFXConfig, engine, engine_fx_fields),
-    CYAML_FIELD_MAPPING("gun_fx", CYAML_FLAG_DEFAULT, HeliFXConfig, gun, gun_fx_fields),
-    CYAML_FIELD_MAPPING("jetiex", CYAML_FLAG_DEFAULT | CYAML_FLAG_OPTIONAL, HeliFXConfig, jetiex, jetiex_fields),
+    // Make both modules optional; missing sections imply disabled
+    CYAML_FIELD_MAPPING("engine_fx", CYAML_FLAG_DEFAULT | CYAML_FLAG_OPTIONAL, HeliFXConfig, engine, engine_fx_fields),
+    CYAML_FIELD_MAPPING("gun_fx", CYAML_FLAG_DEFAULT | CYAML_FLAG_OPTIONAL, HeliFXConfig, gun, gun_fx_fields),
     CYAML_FIELD_END
 };
 
@@ -262,7 +220,8 @@ static inline void apply_defaults_inline(HeliFXConfig *config) {
         config->gun.turret_control.pitch.max_speed_us_per_sec = DEFAULT_SERVO_MAX_SPEED_US_PER_SEC;
     if (config->gun.turret_control.pitch.max_accel_us_per_sec2 == 0.0f)
         config->gun.turret_control.pitch.max_accel_us_per_sec2 = DEFAULT_SERVO_MAX_ACCEL_US_PER_SEC2;
-    APPLY_DEFAULT_IF_ZERO(config->gun.turret_control.pitch.update_rate_hz, DEFAULT_SERVO_UPDATE_RATE_HZ);
+    if (config->gun.turret_control.pitch.max_decel_us_per_sec2 == 0.0f)
+        config->gun.turret_control.pitch.max_decel_us_per_sec2 = DEFAULT_SERVO_MAX_DECEL_US_PER_SEC2;
     
     // Gun - Yaw servo defaults
     APPLY_DEFAULT_IF_ZERO(config->gun.turret_control.yaw.input_min_us, DEFAULT_SERVO_INPUT_MIN_US);
@@ -273,11 +232,8 @@ static inline void apply_defaults_inline(HeliFXConfig *config) {
         config->gun.turret_control.yaw.max_speed_us_per_sec = DEFAULT_SERVO_MAX_SPEED_US_PER_SEC;
     if (config->gun.turret_control.yaw.max_accel_us_per_sec2 == 0.0f)
         config->gun.turret_control.yaw.max_accel_us_per_sec2 = DEFAULT_SERVO_MAX_ACCEL_US_PER_SEC2;
-    APPLY_DEFAULT_IF_ZERO(config->gun.turret_control.yaw.update_rate_hz, DEFAULT_SERVO_UPDATE_RATE_HZ);
-    
-#ifdef ENABLE_JETIEX
-    APPLY_DEFAULT_IF_ZERO(config->jetiex.update_rate_hz, DEFAULT_JETIEX_UPDATE_RATE_HZ);
-#endif
+    if (config->gun.turret_control.yaw.max_decel_us_per_sec2 == 0.0f)
+        config->gun.turret_control.yaw.max_decel_us_per_sec2 = DEFAULT_SERVO_MAX_DECEL_US_PER_SEC2;
 }
 
 /* ============================================================================
@@ -300,14 +256,6 @@ HeliFXConfig* config_load(const char *config_file) {
 
     // Apply defaults for optional fields that weren't in the YAML
     apply_defaults_inline(config);
-
-#ifndef ENABLE_JETIEX
-    // Warn if JetiEX is configured but not compiled in
-    if (config->jetiex.enabled) {
-        LOG_WARN(LOG_CONFIG, "JetiEX telemetry is enabled in config but not compiled (ENABLE_JETIEX=0)");
-        LOG_WARN(LOG_CONFIG, "JetiEX functionality will be ignored");
-    }
-#endif
 
     LOG_INFO(LOG_CONFIG, "Configuration loaded successfully");
     return config;
@@ -342,59 +290,56 @@ int config_validate(const HeliFXConfig *config) {
         return -1;
     }
 
-    // Engine validation
-    if (config->engine.enabled) {
-        if (config->engine.engine_toggle.pin < 0) {
+    // Detect if engine section is present (optional)
+    bool engine_present = (config->engine.engine_toggle.pin != 0) ||
+                          (config->engine.sounds.starting != NULL) ||
+                          (config->engine.sounds.running != NULL) ||
+                          (config->engine.sounds.stopping != NULL);
+
+    // Engine validation (only if present)
+    if (engine_present) {
+        if (config->engine.engine_toggle.pin <= 0) {
             LOG_ERROR(LOG_CONFIG, "Invalid engine pin: %d", config->engine.engine_toggle.pin);
             return -1;
         }
-        if (!config->engine.sounds.starting || !config->engine.sounds.running || !config->engine.sounds.stopping) {
-            LOG_ERROR(LOG_CONFIG, "Missing engine sound files");
-            return -1;
-        }
+        // Engine sounds are optional; no strict validation
     }
 
-    // Gun validation
-    if (config->gun.enabled) {
-        if (config->gun.trigger.pin < 0) {
+    // Detect if gun section is present (optional)
+    bool gun_present = (config->gun.trigger.pin != 0) ||
+                       (config->gun.rate_count > 0) ||
+                       (config->gun.turret_control.pitch.pwm_pin != 0) ||
+                       (config->gun.turret_control.yaw.pwm_pin != 0) ||
+                       (config->gun.smoke.heater_toggle_pin != 0);
+
+    // Gun validation (only if present)
+    if (gun_present) {
+        if (config->gun.trigger.pin <= 0) {
             LOG_ERROR(LOG_CONFIG, "Invalid gun trigger pin: %d", config->gun.trigger.pin);
             return -1;
         }
-        
-        // Validate servos
-        if (config->gun.turret_control.pitch.enabled) {
-            if (config->gun.turret_control.pitch.pwm_pin < 0 || config->gun.turret_control.pitch.output_pin < 0) {
-                LOG_ERROR(LOG_CONFIG, "Invalid pitch servo pins");
-                return -1;
-            }
-        }
-        if (config->gun.turret_control.yaw.enabled) {
-            if (config->gun.turret_control.yaw.pwm_pin < 0 || config->gun.turret_control.yaw.output_pin < 0) {
-                LOG_ERROR(LOG_CONFIG, "Invalid yaw servo pins");
-                return -1;
-            }
-        }
-        
-        // Validate rates of fire
-        if (config->gun.rate_count > 0 && !config->gun.rates) {
-            LOG_ERROR(LOG_CONFIG, "Invalid rates of fire configuration");
-            return -1;
-        }
+        // Serial bus is auto-detected over USB; no config validation needed
     }
 
-#ifdef ENABLE_JETIEX
-    // JetiEX validation
-    if (config->jetiex.enabled) {
-        if (!config->jetiex.serial_port) {
-                LOG_ERROR(LOG_CONFIG, "Missing JetiEX serial port");
-            return -1;
-        }
-        if (config->jetiex.baud_rate == 0) {
-                LOG_ERROR(LOG_CONFIG, "Invalid JetiEX baud rate");
+    // Validate servo inputs and servo_id (outputs handled by Pico)
+    if (config->gun.turret_control.pitch.pwm_pin >= 0) {
+        if (config->gun.turret_control.pitch.servo_id <= 0) {
+            LOG_ERROR(LOG_CONFIG, "Invalid pitch servo_id: must be > 0");
             return -1;
         }
     }
-#endif
+    if (config->gun.turret_control.yaw.pwm_pin >= 0) {
+        if (config->gun.turret_control.yaw.servo_id <= 0) {
+            LOG_ERROR(LOG_CONFIG, "Invalid yaw servo_id: must be > 0");
+            return -1;
+        }
+    }
+    
+    // Validate rates of fire
+    if (config->gun.rate_count > 0 && !config->gun.rates) {
+        LOG_ERROR(LOG_CONFIG, "Invalid rates of fire configuration");
+        return -1;
+    }
 
     LOG_INFO(LOG_CONFIG, "Configuration validation passed");
     return 0;
@@ -421,69 +366,75 @@ void config_print(const HeliFXConfig *config) {
     printf(COLOR_CYAN COLOR_BOLD "╚════════════════════════════════════════════════════════════════╝\n" COLOR_RESET);
     printf("\n");
     
-    // Engine FX
-    if (config->engine.enabled) {
+    // Engine FX (optional)
+    bool engine_present = (config->engine.engine_toggle.pin != 0) ||
+                          (config->engine.sounds.starting != NULL) ||
+                          (config->engine.sounds.running != NULL) ||
+                          (config->engine.sounds.stopping != NULL);
+    if (engine_present) {
         printf(COLOR_GREEN "✓ Engine FX" COLOR_RESET " | Toggle: GPIO %d (threshold: %d µs)\n", 
                config->engine.engine_toggle.pin, 
                config->engine.engine_toggle.threshold_us);
-        
-        // Sound files
-        bool has_sounds = config->engine.sounds.starting || 
-                         config->engine.sounds.running || 
-                         config->engine.sounds.stopping;
-        if (has_sounds) {
-            printf("    Sounds: ");
-            if (config->engine.sounds.starting) printf("[START] ");
-            if (config->engine.sounds.running) printf("[RUN] ");
-            if (config->engine.sounds.stopping) printf("[STOP]");
-            printf("\n");
-        }
-    } else {
-        printf(COLOR_YELLOW "✗ Engine FX" COLOR_RESET " (disabled)\n");
+    
+    // Sound files
+    bool has_sounds = config->engine.sounds.starting || 
+                     config->engine.sounds.running || 
+                     config->engine.sounds.stopping;
+    if (has_sounds) {
+        printf("    Sounds: ");
+        if (config->engine.sounds.starting) printf("[START] ");
+        if (config->engine.sounds.running) printf("[RUN] ");
+        if (config->engine.sounds.stopping) printf("[STOP]");
+        printf("\n");
     }
     printf("\n");
+    } else {
+        printf(COLOR_YELLOW "✗ Engine FX" COLOR_RESET " (disabled)\n\n");
+    }
     
-    // Gun FX
-    if (config->gun.enabled) {
+    // Gun FX (optional)
+    bool gun_present = (config->gun.trigger.pin != 0) ||
+                       (config->gun.rate_count > 0) ||
+                       (config->gun.turret_control.pitch.pwm_pin != 0) ||
+                       (config->gun.turret_control.yaw.pwm_pin != 0) ||
+                       (config->gun.smoke.heater_toggle_pin != 0);
+    if (gun_present) {
         printf(COLOR_GREEN "✓ Gun FX" COLOR_RESET " | Trigger: GPIO %d\n", config->gun.trigger.pin);
+    
+    // Smoke Generator
+    printf("    " COLOR_MAGENTA "Smoke" COLOR_RESET ": Toggle=GPIO %d (threshold=%d µs, fan_delay=%d ms)\n", 
+           config->gun.smoke.heater_toggle_pin,
+           config->gun.smoke.heater_pwm_threshold_us,
+           config->gun.smoke.fan_off_delay_ms);
+    
+    // Turret/Servo Control
+    if (config->gun.turret_control.pitch.pwm_pin >= 0 || config->gun.turret_control.yaw.pwm_pin >= 0) {
+        printf("    " COLOR_BLUE "Servos" COLOR_RESET ":\n");
         
-        // Nozzle Flash
-        if (config->gun.nozzle_flash.enabled) {
-            printf("    " COLOR_MAGENTA "Flash" COLOR_RESET ": GPIO %d\n", config->gun.nozzle_flash.pin);
+        if (config->gun.turret_control.pitch.pwm_pin >= 0) {
+            printf("      • Pitch: Servo ID=%d, PWM=GPIO %d, Speed=%d µs/s, Accel=%d µs/s², Decel=%d µs/s²\n", 
+                   config->gun.turret_control.pitch.servo_id,
+                   config->gun.turret_control.pitch.pwm_pin,
+                   (int)config->gun.turret_control.pitch.max_speed_us_per_sec,
+                   (int)config->gun.turret_control.pitch.max_accel_us_per_sec2,
+                   (int)config->gun.turret_control.pitch.max_decel_us_per_sec2);
         }
         
-        // Smoke Generator
-        if (config->gun.smoke.enabled) {
-            printf("    " COLOR_MAGENTA "Smoke" COLOR_RESET ": Fan=GPIO %d, Heater=GPIO %d, Toggle=GPIO %d\n", 
-                   config->gun.smoke.fan_pin,
-                   config->gun.smoke.heater_pin,
-                   config->gun.smoke.heater_toggle_pin);
+        if (config->gun.turret_control.yaw.pwm_pin >= 0) {
+            printf("      • Yaw:   Servo ID=%d, PWM=GPIO %d, Speed=%d µs/s, Accel=%d µs/s², Decel=%d µs/s²\n", 
+                   config->gun.turret_control.yaw.servo_id,
+                   config->gun.turret_control.yaw.pwm_pin,
+                   (int)config->gun.turret_control.yaw.max_speed_us_per_sec,
+                   (int)config->gun.turret_control.yaw.max_accel_us_per_sec2,
+                   (int)config->gun.turret_control.yaw.max_decel_us_per_sec2);
         }
-        
-        // Turret/Servo Control
-        if (config->gun.turret_control.pitch.enabled || config->gun.turret_control.yaw.enabled) {
-            printf("    " COLOR_BLUE "Servos" COLOR_RESET ":\n");
-            
-            if (config->gun.turret_control.pitch.enabled) {
-                printf("      • Pitch: PWM=GPIO %d, Output=GPIO %d, Speed=%d µs/s\n", 
-                       config->gun.turret_control.pitch.pwm_pin,
-                       config->gun.turret_control.pitch.output_pin,
-                       (int)config->gun.turret_control.pitch.max_speed_us_per_sec);
-            }
-            
-            if (config->gun.turret_control.yaw.enabled) {
-                printf("      • Yaw:   PWM=GPIO %d, Output=GPIO %d, Speed=%d µs/s\n", 
-                       config->gun.turret_control.yaw.pwm_pin,
-                       config->gun.turret_control.yaw.output_pin,
-                       (int)config->gun.turret_control.yaw.max_speed_us_per_sec);
-            }
-        }
-        
-        // Rates of Fire
-        if (config->gun.rate_count > 0) {
-            printf("    " COLOR_YELLOW "Rates of Fire" COLOR_RESET ":\n");
-            for (int i = 0; i < config->gun.rate_count; i++) {
-                printf("      • %s: %d RPM (threshold: %d µs)\n", 
+    }
+    
+    // Rates of Fire
+    if (config->gun.rate_count > 0) {
+        printf("    " COLOR_YELLOW "Rates of Fire" COLOR_RESET ":\n");
+        for (int i = 0; i < config->gun.rate_count; i++) {
+            printf("      • %s: %d RPM (threshold: %d µs)\n", 
                        config->gun.rates[i].name,
                        config->gun.rates[i].rpm,
                        config->gun.rates[i].pwm_threshold_us);
@@ -493,19 +444,6 @@ void config_print(const HeliFXConfig *config) {
         printf(COLOR_YELLOW "✗ Gun FX" COLOR_RESET " (disabled)\n");
     }
     printf("\n");
-    
-#ifdef ENABLE_JETIEX
-    // JetiEX Telemetry
-    if (config->jetiex.enabled) {
-        printf(COLOR_GREEN "✓ JetiEX Telemetry" COLOR_RESET " | Port: %s, Baud: %u, Rate: %u Hz\n",
-               config->jetiex.serial_port ?: "?",
-               config->jetiex.baud_rate,
-               config->jetiex.update_rate_hz);
-    } else {
-        printf(COLOR_YELLOW "✗ JetiEX Telemetry" COLOR_RESET " (disabled)\n");
-    }
-    printf("\n");
-#endif
     
     printf(COLOR_CYAN COLOR_BOLD "───────────────────────────────────────────────────────────────\n" COLOR_RESET);
     printf("\n");

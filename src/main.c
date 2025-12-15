@@ -14,9 +14,6 @@
 #include "config_loader.h"
 #include "logging.h"
 #include "status.h"
-#ifdef ENABLE_JETIEX
-#include "helifx_jetiex.h"
-#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -122,13 +119,16 @@ int main(int argc, char *argv[]) {
         return 1;
     }
     
-    // Initialize Engine FX
+    // Initialize Engine FX if configured (optional)
     EngineFX *engine = nullptr;
-    
-    if (config->engine.enabled) {
+    bool engine_present = (config->engine.engine_toggle.pin != 0) ||
+                          (config->engine.sounds.starting != NULL) ||
+                          (config->engine.sounds.running != NULL) ||
+                          (config->engine.sounds.stopping != NULL);
+    if (engine_present) {
         LOG_INFO(LOG_HELIFX, "Initializing Engine FX...");
         
-        // Load engine sounds
+        // Load engine sounds (any may be null)
         sound_manager_load_sound(sound_mgr, SOUND_ENGINE_STARTING, config->engine.sounds.starting);
         sound_manager_load_sound(sound_mgr, SOUND_ENGINE_RUNNING, config->engine.sounds.running);
         sound_manager_load_sound(sound_mgr, SOUND_ENGINE_STOPPING, config->engine.sounds.stopping);
@@ -144,12 +144,18 @@ int main(int argc, char *argv[]) {
                 sound_manager_get_sound(sound_mgr, SOUND_ENGINE_STOPPING));
             LOG_INFO(LOG_HELIFX, "Engine FX initialized");
         }
+    } else {
+        LOG_INFO(LOG_HELIFX, "Engine FX not configured; skipping initialization");
     }
     
-    // Initialize Gun FX
+    // Initialize Gun FX if configured (optional)
     GunFX *gun = nullptr;
-    
-    if (config->gun.enabled) {
+    bool gun_present = (config->gun.trigger.pin != 0) ||
+                       (config->gun.rate_count > 0) ||
+                       (config->gun.turret_control.pitch.pwm_pin != 0) ||
+                       (config->gun.turret_control.yaw.pwm_pin != 0) ||
+                       (config->gun.smoke.heater_toggle_pin != 0);
+    if (gun_present) {
         LOG_INFO(LOG_HELIFX, "Initializing Gun FX...");
         
         // Load gun sounds (up to 10 rates supported)
@@ -183,18 +189,12 @@ int main(int argc, char *argv[]) {
                 
                 free(rates);
                 
-                // Set smoke fan off delay
-                gun_fx_set_smoke_fan_off_delay(gun, config->gun.smoke.fan_off_delay_ms);
-                
                 LOG_INFO(LOG_HELIFX, "Gun FX initialized with %d rates", config->gun.rate_count);
             }
         }
+    } else {
+        LOG_INFO(LOG_HELIFX, "Gun FX not configured; skipping initialization");
     }
-    
-#ifdef ENABLE_JETIEX
-    // Initialize JetiEX telemetry
-    JetiEX *jetiex = helifx_jetiex_init(config, config_file, gun, engine);
-#endif
     
     // Create status display if in interactive mode
     StatusDisplay *status = NULL;
@@ -210,11 +210,8 @@ int main(int argc, char *argv[]) {
         printf("\n[HELIFX] System ready. Press Ctrl+C to exit.\n\n");
     }
     
-    // Main loop - update telemetry
+    // Main loop
     while (running) {
-#ifdef ENABLE_JETIEX
-        helifx_jetiex_update(jetiex, gun, engine);
-#endif
         sleep(1);
     }
     
@@ -229,11 +226,6 @@ int main(int argc, char *argv[]) {
         status_display_destroy(status);
         LOG_INFO(LOG_HELIFX, "Status display stopped");
     }
-    
-#ifdef ENABLE_JETIEX
-    helifx_jetiex_cleanup(jetiex);
-    LOG_INFO(LOG_HELIFX, "JetiEX telemetry stopped");
-#endif
     
     if (engine) {
         engine_fx_destroy(engine);

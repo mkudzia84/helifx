@@ -2,9 +2,7 @@
 #include "config_loader.h"
 #include "gpio.h"
 #include "audio_player.h"
-#include "lights.h"
-#include "smoke_generator.h"
-#include "servo.h"
+#include "serial_bus.h"
 #include "logging.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -13,36 +11,49 @@
 #include <unistd.h>
 #include <string.h>
 
+// ---------------------- Binary Protocol (PC -> Pico) ----------------------
+// Packet: [type:u8][len:u8][payload:len][crc8(0x07 over type+len+payload)] then COBS-encoded and terminated with 0x00
+// Types (mirror pico firmware):
+// 0x01 TRIGGER_ON    payload rpm:u16le
+// 0x02 TRIGGER_OFF   payload fan_delay_ms:u16le
+// 0x10 SRV_SET       payload servo_id:u8, pulse_us:u16le
+// 0x11 SRV_SETTINGS  payload servo_id:u8, min:u16le, max:u16le, max_speed:u16le, accel:u16le, decel:u16le
+// 0x20 SMOKE_HEAT    payload on:u8 (0/1)
+
+static const uint8_t PKT_TRIGGER_ON   = 0x01;
+static const uint8_t PKT_TRIGGER_OFF  = 0x02;
+static const uint8_t PKT_SRV_SET      = 0x10;
+static const uint8_t PKT_SRV_SETTINGS = 0x11;
+static const uint8_t PKT_SMOKE_HEAT   = 0x20;
+
+
 struct GunFX {
     // Audio
     AudioMixer *mixer;
     int audio_channel;
+
+    // Serial bus to Pico
+    SerialBus *serial_bus;
+    SerialBusConfig serial_bus_config;
     
-    // PWM monitoring for trigger
+    // PWM monitoring for trigger and heater toggle
     PWMMonitor *trigger_pwm_monitor;
     int trigger_pwm_pin;
-    
-    // PWM monitoring for smoke heater toggle
     PWMMonitor *smoke_heater_toggle_monitor;
     int smoke_heater_toggle_pin;
     int smoke_heater_threshold;
     
-    // Servo control
-    Servo *pitch_servo;
-    Servo *yaw_servo;
+    // Servo inputs (pitch/yaw) mapped to Pico servo IDs
     PWMMonitor *pitch_pwm_monitor;
     PWMMonitor *yaw_pwm_monitor;
     int pitch_pwm_pin;
     int yaw_pwm_pin;
-    int pitch_output_pin;
-    int yaw_output_pin;
-    
-    // Components (optional)
-    Led *nozzle_flash;
-    int nozzle_flash_pin;
-    SmokeGenerator *smoke;
-    int smoke_fan_pin;
-    int smoke_heater_pin;
+    ServoConfig pitch_cfg;
+    ServoConfig yaw_cfg;
+    int pitch_servo_id;
+    int yaw_servo_id;
+    int last_pitch_output_us;
+    int last_yaw_output_us;
     
     // Rates of fire
     RateOfFire *rates;
@@ -54,15 +65,12 @@ struct GunFX {
     atomic_int current_rate_index;  // Currently active rate (-1 = not firing)
     atomic_bool smoke_heater_on;
     
-    // Smoke fan control
-    int smoke_fan_off_delay_ms;  // Delay before turning smoke fan off after firing stops
-    struct timespec smoke_stop_time;  // Time when firing stopped
-    atomic_bool smoke_fan_pending_off;  // True if smoke fan is waiting to turn off
-    
     // Processing thread
     thrd_t processing_thread;
     atomic_bool processing_running;
 };
+
+// ---------------------- Protocol helpers ----------------------
 
 // Select rate of fire from PWM reading with hysteresis
 // Returns -1 if not firing, or index of active rate (0 to rate_count-1)
@@ -110,12 +118,67 @@ static int select_rate_of_fire(GunFX *gun, int pwm_duration_us, int previous_rat
     return best_match;  // Returns -1 if no match found (not firing)
 }
 
+static int map_input_to_output_us(const ServoConfig *cfg, int input_us) {
+    if (input_us < cfg->input_min_us) input_us = cfg->input_min_us;
+    if (input_us > cfg->input_max_us) input_us = cfg->input_max_us;
+
+    float input_range = (float)(cfg->input_max_us - cfg->input_min_us);
+    float output_range = (float)(cfg->output_max_us - cfg->output_min_us);
+    if (input_range <= 0.0f) return cfg->output_min_us;
+
+    float normalized = (float)(input_us - cfg->input_min_us) / input_range;
+    int output_us = cfg->output_min_us + (int)(normalized * output_range);
+    if (output_us < cfg->output_min_us) output_us = cfg->output_min_us;
+    if (output_us > cfg->output_max_us) output_us = cfg->output_max_us;
+    return output_us;
+}
+
+static void send_servo_command(GunFX *gun, int servo_id, int output_us, int *last_sent) {
+    if (last_sent && *last_sent == output_us) return;
+    if (!gun->serial_bus) {
+        static int warn_count = 0;
+        if (warn_count < 5) {
+            LOG_ERROR(LOG_GUN, "Serial bus not available; cannot send servo command");
+            warn_count++;
+        }
+        return;
+    }
+
+    uint8_t payload[3];
+    payload[0] = (uint8_t)servo_id;
+    payload[1] = (uint8_t)(output_us & 0xFF);
+    payload[2] = (uint8_t)((output_us >> 8) & 0xFF);
+    if (serial_bus_send_packet(gun->serial_bus, PKT_SRV_SET, payload, sizeof(payload)) == 0 && last_sent) {
+        *last_sent = output_us;
+    }
+}
+
+// Send servo configuration (settings) to Pico
+static void send_servo_setup(GunFX *gun, int servo_id, const ServoConfig *cfg) {
+    if (!gun->serial_bus || servo_id <= 0) return;
+    
+    uint8_t payload[11];
+    payload[0] = (uint8_t)servo_id;
+    payload[1] = (uint8_t)(cfg->output_min_us & 0xFF);
+    payload[2] = (uint8_t)((cfg->output_min_us >> 8) & 0xFF);
+    payload[3] = (uint8_t)(cfg->output_max_us & 0xFF);
+    payload[4] = (uint8_t)((cfg->output_max_us >> 8) & 0xFF);
+    payload[5] = (uint8_t)((int)cfg->max_speed_us_per_sec & 0xFF);
+    payload[6] = (uint8_t)(((int)cfg->max_speed_us_per_sec >> 8) & 0xFF);
+    payload[7] = (uint8_t)((int)cfg->max_accel_us_per_sec2 & 0xFF);
+    payload[8] = (uint8_t)(((int)cfg->max_accel_us_per_sec2 >> 8) & 0xFF);
+    payload[9] = (uint8_t)((int)cfg->max_decel_us_per_sec2 & 0xFF);
+    payload[10] = (uint8_t)(((int)cfg->max_decel_us_per_sec2 >> 8) & 0xFF);
+    serial_bus_send_packet(gun->serial_bus, PKT_SRV_SETTINGS, payload, sizeof(payload));
+}
+
 // Update servo positions from averaged PWM inputs
 static void update_servos(GunFX *gun) {
-    if (gun->pitch_servo && gun->pitch_pwm_monitor) {
+    if (gun->pitch_pwm_monitor && gun->pitch_cfg.servo_id > 0) {
         int pitch_avg_us;
         if (pwm_monitor_get_average(gun->pitch_pwm_monitor, &pitch_avg_us)) {
-            servo_set_input(gun->pitch_servo, pitch_avg_us);
+            int output_us = map_input_to_output_us(&gun->pitch_cfg, pitch_avg_us);
+            send_servo_command(gun, gun->pitch_servo_id, output_us, &gun->last_pitch_output_us);
         } else {
             static int pitch_warn_count = 0;
             if (pitch_warn_count < 5) {
@@ -125,10 +188,11 @@ static void update_servos(GunFX *gun) {
         }
     }
     
-    if (gun->yaw_servo && gun->yaw_pwm_monitor) {
+    if (gun->yaw_pwm_monitor && gun->yaw_cfg.servo_id > 0) {
         int yaw_avg_us;
         if (pwm_monitor_get_average(gun->yaw_pwm_monitor, &yaw_avg_us)) {
-            servo_set_input(gun->yaw_servo, yaw_avg_us);
+            int output_us = map_input_to_output_us(&gun->yaw_cfg, yaw_avg_us);
+            send_servo_command(gun, gun->yaw_servo_id, output_us, &gun->last_yaw_output_us);
         } else {
             static int yaw_warn_count = 0;
             if (yaw_warn_count < 5) {
@@ -190,14 +254,16 @@ static void handle_smoke_heater(GunFX *gun) {
     if (heater_toggle_on && !current_heater_on) {
         atomic_store(&gun->smoke_heater_on, true);
         LOG_INFO(LOG_GUN, "Smoke heater ON (PWM avg: %d µs)", heater_avg_us);
-        if (gun->smoke) {
-            smoke_generator_heater_on(gun->smoke);
+        if (gun->serial_bus) {
+            uint8_t payload = 1;
+            serial_bus_send_packet(gun->serial_bus, PKT_SMOKE_HEAT, &payload, 1);
         }
     } else if (!heater_toggle_on && current_heater_on) {
         atomic_store(&gun->smoke_heater_on, false);
-        LOG_INFO(LOG_GUN, "Smoke heater OFF (PWM avg: %d µs)", heater_avg_us);
-        if (gun->smoke) {
-            smoke_generator_heater_off(gun->smoke);
+        LOG_INFO(LOG_GUN, "Smoke heater OFF (PWM avg: %d µs)");
+        if (gun->serial_bus) {
+            uint8_t payload = 0;
+            serial_bus_send_packet(gun->serial_bus, PKT_SMOKE_HEAT, &payload, 1);
         }
     }
 }
@@ -214,15 +280,12 @@ static void handle_rate_change(GunFX *gun, int new_rate_index, int previous_rate
     
     if (new_rate_index >= 0) {
         // Start or change firing rate
-        int shot_interval_ms = (60 * 1000) / gun->rates[new_rate_index].rounds_per_minute;
+        int rpm = gun->rates[new_rate_index].rounds_per_minute;
         
-        if (gun->nozzle_flash) {
-            led_blink(gun->nozzle_flash, shot_interval_ms);
-        }
-        
-        if (gun->smoke) {
-            smoke_generator_fan_on(gun->smoke);
-            atomic_store(&gun->smoke_fan_pending_off, false);
+        // Send TRIGGER_ON command to Pico
+        if (gun->serial_bus) {
+            uint8_t payload[2] = { (uint8_t)(rpm & 0xFF), (uint8_t)((rpm >> 8) & 0xFF) };
+            serial_bus_send_packet(gun->serial_bus, PKT_TRIGGER_ON, payload, sizeof(payload));
         }
         
         if (gun->mixer && gun->rates[new_rate_index].sound) {
@@ -232,65 +295,62 @@ static void handle_rate_change(GunFX *gun, int new_rate_index, int previous_rate
         
         if (previous_rate_index < 0) {
             LOG_STATE(LOG_GUN, "IDLE", "FIRING");
-            LOG_INFO(LOG_GUN, "Firing started at %d RPM (rate %d) | Shot interval: %d ms",
-                    gun->rates[new_rate_index].rounds_per_minute,
-                    new_rate_index + 1,
-                    shot_interval_ms);
+            LOG_INFO(LOG_GUN, "Firing started at %d RPM (rate %d)", rpm, new_rate_index + 1);
         } else {
             LOG_STATE(LOG_GUN, "FIRING", "RATE_CHANGED");
-            LOG_INFO(LOG_GUN, "Rate changed to %d RPM (rate %d) | Shot interval: %d ms",
-                    gun->rates[new_rate_index].rounds_per_minute,
-                    new_rate_index + 1,
-                    shot_interval_ms);
+            LOG_INFO(LOG_GUN, "Rate changed to %d RPM (rate %d)", rpm, new_rate_index + 1);
         }
     } else {
-        // Stop firing
-        if (gun->nozzle_flash) {
-            led_off(gun->nozzle_flash);
+        // Stop firing - send TRIGGER_OFF; Pico handles fan delay internally
+        if (gun->serial_bus) {
+            uint8_t payload[1] = { 0 }; // Fan delay handled by Pico
+            serial_bus_send_packet(gun->serial_bus, PKT_TRIGGER_OFF, payload, sizeof(payload));
         }
         
         if (gun->mixer) {
             audio_mixer_stop_channel(gun->mixer, gun->audio_channel, STOP_IMMEDIATE);
         }
         
-        if (gun->smoke) {
-            if (gun->smoke_fan_off_delay_ms > 0) {
-                clock_gettime(CLOCK_MONOTONIC, &gun->smoke_stop_time);
-                atomic_store(&gun->smoke_fan_pending_off, true);
-                LOG_STATE(LOG_GUN, "FIRING", "STOPPING");
-                LOG_INFO(LOG_GUN, "Firing stopped | Smoke fan will stop in %d ms", gun->smoke_fan_off_delay_ms);
-            } else {
-                smoke_generator_fan_off(gun->smoke);
-                LOG_STATE(LOG_GUN, "FIRING", "IDLE");
-                LOG_INFO(LOG_GUN, "Firing stopped immediately");
-            }
-        } else {
-            LOG_STATE(LOG_GUN, "FIRING", "IDLE");
-            LOG_INFO(LOG_GUN, "Firing stopped (no smoke)");
+        LOG_STATE(LOG_GUN, "FIRING", "IDLE");
+        LOG_INFO(LOG_GUN, "Firing stopped (fan timing handled by Pico)");
+    }
+}
+
+
+
+
+// Setup servo PWM monitoring and send initial servo settings to Pico
+static int setup_servos(GunFX *gun, const GunFXConfig *config) {
+    // Create pitch PWM monitor if pin specified
+    if (gun->pitch_pwm_pin >= 0) {
+        gun->pitch_pwm_monitor = pwm_monitor_create_with_name(gun->pitch_pwm_pin, "Turret Pitch Servo", nullptr, nullptr);
+        if (!gun->pitch_pwm_monitor) {
+            LOG_ERROR(LOG_GUN, "Failed to create pitch PWM monitor on GPIO %d", gun->pitch_pwm_pin);
+            return -1;
         }
-    }
-}
-
-// Check and handle delayed smoke fan shutdown
-static void handle_smoke_fan_delay(GunFX *gun) {
-    if (!atomic_load(&gun->smoke_fan_pending_off) || !gun->smoke) {
-        return;
+        pwm_monitor_start(gun->pitch_pwm_monitor);
+        LOG_DEBUG(LOG_GUN, "Pitch servo input monitoring started on GPIO %d (servo_id=%d)",
+                 gun->pitch_pwm_pin, gun->pitch_cfg.servo_id);
     }
     
-    struct timespec current_time_smoke;
-    clock_gettime(CLOCK_MONOTONIC, &current_time_smoke);
-    double elapsed_ms = ((current_time_smoke.tv_sec - gun->smoke_stop_time.tv_sec) * 1000.0) +
-                       ((current_time_smoke.tv_nsec - gun->smoke_stop_time.tv_nsec) / 1e6);
-    
-    if (elapsed_ms >= gun->smoke_fan_off_delay_ms) {
-        smoke_generator_fan_off(gun->smoke);
-        atomic_store(&gun->smoke_fan_pending_off, false);
-        LOG_DEBUG(LOG_GUN, "Smoke fan stopped after %d ms delay (actual: %.1f ms)",
-                 gun->smoke_fan_off_delay_ms, elapsed_ms);
+    // Create yaw PWM monitor if pin specified
+    if (gun->yaw_pwm_pin >= 0) {
+        gun->yaw_pwm_monitor = pwm_monitor_create_with_name(gun->yaw_pwm_pin, "Turret Yaw Servo", nullptr, nullptr);
+        if (!gun->yaw_pwm_monitor) {
+            LOG_ERROR(LOG_GUN, "Failed to create yaw PWM monitor on GPIO %d", gun->yaw_pwm_pin);
+            return -1;
+        }
+        pwm_monitor_start(gun->yaw_pwm_monitor);
+        LOG_DEBUG(LOG_GUN, "Yaw servo input monitoring started on GPIO %d (servo_id=%d)",
+                 gun->yaw_pwm_pin, gun->yaw_cfg.servo_id);
     }
+    
+    // Send initial servo settings to Pico
+    send_servo_setup(gun, gun->pitch_cfg.servo_id, &gun->pitch_cfg);
+    send_servo_setup(gun, gun->yaw_cfg.servo_id, &gun->yaw_cfg);
+    
+    return 0;
 }
-
-
 
 // Processing thread to monitor PWM and handle firing
 static int gun_fx_processing_thread(void *arg) {
@@ -316,9 +376,6 @@ static int gun_fx_processing_thread(void *arg) {
         // Handle rate changes and firing logic
         handle_rate_change(gun, new_rate_index, previous_rate_index);
         
-        // Check smoke fan delay
-        handle_smoke_fan_delay(gun);
-        
         usleep(10000); // 10ms loop
     }
     
@@ -342,12 +399,16 @@ GunFX* gun_fx_create(AudioMixer *mixer, int audio_channel,
     gun->mixer = mixer;
     gun->audio_channel = audio_channel;
     gun->trigger_pwm_pin = config->trigger.pin;
-    gun->nozzle_flash_pin = config->nozzle_flash.pin;
-    gun->smoke_fan_pin = config->smoke.fan_pin;
-    gun->smoke_heater_pin = config->smoke.heater_pin;
     gun->smoke_heater_toggle_pin = config->smoke.heater_toggle_pin;
     gun->smoke_heater_threshold = config->smoke.heater_pwm_threshold_us;
-    gun->smoke_fan_off_delay_ms = config->smoke.fan_off_delay_ms;
+    gun->pitch_cfg = config->turret_control.pitch;
+    gun->yaw_cfg = config->turret_control.yaw;
+    gun->pitch_pwm_pin = config->turret_control.pitch.pwm_pin;
+    gun->yaw_pwm_pin = config->turret_control.yaw.pwm_pin;
+    gun->pitch_servo_id = config->turret_control.pitch.servo_id;
+    gun->yaw_servo_id = config->turret_control.yaw.servo_id;
+    gun->last_pitch_output_us = -1;
+    gun->last_yaw_output_us = -1;
     gun->rates = nullptr;
     gun->rate_count = 0;
     atomic_init(&gun->is_firing, false);
@@ -355,34 +416,33 @@ GunFX* gun_fx_create(AudioMixer *mixer, int audio_channel,
     atomic_init(&gun->current_rate_index, -1);  // Not firing initially
     atomic_init(&gun->smoke_heater_on, false);
     atomic_init(&gun->processing_running, false);
-    gun->pitch_servo = nullptr;
-    gun->yaw_servo = nullptr;
     gun->pitch_pwm_monitor = nullptr;
     gun->yaw_pwm_monitor = nullptr;
     
-    // Create nozzle flash LED if pin specified
-    if (config->nozzle_flash.pin >= 0) {
-        gun->nozzle_flash = led_create(config->nozzle_flash.pin);
-        if (!gun->nozzle_flash) {
-            LOG_WARN(LOG_GUN, "Failed to create nozzle flash LED on GPIO %d", config->nozzle_flash.pin);
-        } else {
-            LOG_DEBUG(LOG_GUN, "Nozzle flash LED initialized on GPIO %d", config->nozzle_flash.pin);
-        }
+    // Open serial bus to gunfx_pico by USB VID/PID
+    // Use default configuration: baud_rate=115200, timeout_ms=100
+    SerialBusConfig pico_config = {
+        .device_path = "",  // Will be populated by serial_bus_open_by_vid_pid
+        .baud_rate = 115200,
+        .timeout_ms = 100
+    };
+    
+    // USB VID/PID for gunfx_pico device
+    const uint16_t GUNFX_PICO_VID = 0x2e8a;  // Raspberry Pi Foundation
+    const uint16_t GUNFX_PICO_PID = 0x0180;  // gunfx_pico
+    
+    gun->serial_bus = serial_bus_open_by_vid_pid(GUNFX_PICO_VID, GUNFX_PICO_PID, &pico_config);
+    if (!gun->serial_bus) {
+        LOG_ERROR(LOG_GUN, "Failed to detect gunfx_pico (VID=%04x, PID=%04x) - is device plugged in?",
+                 GUNFX_PICO_VID, GUNFX_PICO_PID);
+        free(gun);
+        return nullptr;
     }
     
-    // Create smoke generator if pins specified
-    // Create smoke generator if pins specified
-    if (config->smoke.fan_pin >= 0 && config->smoke.heater_pin >= 0) {
-        gun->smoke = smoke_generator_create(config->smoke.heater_pin, config->smoke.fan_pin);
-        if (!gun->smoke) {
-            LOG_WARN(LOG_GUN, "Failed to create smoke generator (heater GPIO %d, fan GPIO %d)",
-                    config->smoke.heater_pin, config->smoke.fan_pin);
-        } else {
-            LOG_DEBUG(LOG_GUN, "Smoke generator initialized (heater GPIO %d, fan GPIO %d)",
-                     config->smoke.heater_pin, config->smoke.fan_pin);
-        }
-    }
+    gun->serial_bus_config = pico_config;
     
+    LOG_DEBUG(LOG_GUN, "gunfx_pico opened on %s", gun->serial_bus_config.device_path);
+
     // Create trigger PWM monitor if pin specified
     if (config->trigger.pin >= 0) {
         gun->trigger_pwm_monitor = pwm_monitor_create_with_name(config->trigger.pin, "Gun Trigger", nullptr, nullptr);
@@ -407,50 +467,23 @@ GunFX* gun_fx_create(AudioMixer *mixer, int audio_channel,
         }
     }
     
-    // Create pitch servo if enabled
-    if (config->turret_control.pitch.enabled) {
-        gun->pitch_servo = servo_create(&config->turret_control.pitch);
-        if (!gun->pitch_servo) {
-            LOG_ERROR(LOG_GUN, "Failed to create pitch servo");
-        } else {
-            gun->pitch_pwm_monitor = pwm_monitor_create_with_name(config->turret_control.pitch.pwm_pin, "Turret Pitch Servo", nullptr, nullptr);
-            if (!gun->pitch_pwm_monitor) {
-                LOG_ERROR(LOG_GUN, "Failed to create pitch PWM monitor on GPIO %d",
-                        config->turret_control.pitch.pwm_pin);
-                servo_destroy(gun->pitch_servo);
-                gun->pitch_servo = nullptr;
-            } else {
-                pwm_monitor_start(gun->pitch_pwm_monitor);
-                gun->pitch_pwm_pin = config->turret_control.pitch.pwm_pin;
-                gun->pitch_output_pin = config->turret_control.pitch.output_pin;
-                LOG_DEBUG(LOG_GUN, "Pitch servo initialized (input GPIO %d, output GPIO %d)",
-                         config->turret_control.pitch.pwm_pin, config->turret_control.pitch.output_pin);
-            }
+    // Setup servo monitoring and configuration
+    if (setup_servos(gun, config) != 0) {
+        LOG_ERROR(LOG_GUN, "Failed to setup servos");
+        
+        if (gun->trigger_pwm_monitor) {
+            pwm_monitor_stop(gun->trigger_pwm_monitor);
+            pwm_monitor_destroy(gun->trigger_pwm_monitor);
         }
-    }
-    
-    // Create yaw servo if enabled
-    if (config->turret_control.yaw.enabled) {
-        gun->yaw_servo = servo_create(&config->turret_control.yaw);
-        if (!gun->yaw_servo) {
-            LOG_ERROR(LOG_GUN, "Failed to create yaw servo");
-        } else {
-            gun->yaw_pwm_monitor = pwm_monitor_create_with_name(config->turret_control.yaw.pwm_pin, "Turret Yaw Servo", nullptr, nullptr);
-            if (!gun->yaw_pwm_monitor) {
-                LOG_ERROR(LOG_GUN, "Failed to create yaw PWM monitor on GPIO %d",
-                        config->turret_control.yaw.pwm_pin);
-                servo_destroy(gun->yaw_servo);
-                gun->yaw_servo = nullptr;
-            } else {
-                pwm_monitor_start(gun->yaw_pwm_monitor);
-                gun->yaw_pwm_pin = config->turret_control.yaw.pwm_pin;
-                gun->yaw_output_pin = config->turret_control.yaw.output_pin;
-                LOG_DEBUG(LOG_GUN, "Yaw servo initialized (input GPIO %d, output GPIO %d)",
-                         config->turret_control.yaw.pwm_pin, config->turret_control.yaw.output_pin);
-            }
+        if (gun->smoke_heater_toggle_monitor) {
+            pwm_monitor_stop(gun->smoke_heater_toggle_monitor);
+            pwm_monitor_destroy(gun->smoke_heater_toggle_monitor);
         }
+        if (gun->serial_bus) serial_bus_close(gun->serial_bus);
+        free(gun);
+        return nullptr;
     }
-    
+
     // Start processing thread
     atomic_store(&gun->processing_running, true);
     if (thrd_create(&gun->processing_thread, gun_fx_processing_thread, gun) != thrd_success) {
@@ -465,8 +498,7 @@ GunFX* gun_fx_create(AudioMixer *mixer, int audio_channel,
             pwm_monitor_stop(gun->smoke_heater_toggle_monitor);
             pwm_monitor_destroy(gun->smoke_heater_toggle_monitor);
         }
-        if (gun->nozzle_flash) led_destroy(gun->nozzle_flash);
-        if (gun->smoke) smoke_generator_destroy(gun->smoke);
+        if (gun->serial_bus) serial_bus_close(gun->serial_bus);
         free(gun);
         return nullptr;
     }
@@ -501,12 +533,12 @@ void gun_fx_destroy(GunFX *gun) {
         pwm_monitor_stop(gun->yaw_pwm_monitor);
         pwm_monitor_destroy(gun->yaw_pwm_monitor);
     }
+
+    if (gun->serial_bus) {
+        serial_bus_close(gun->serial_bus);
+    }
     
     // Destroy components
-    if (gun->nozzle_flash) led_destroy(gun->nozzle_flash);
-    if (gun->smoke) smoke_generator_destroy(gun->smoke);
-    if (gun->pitch_servo) servo_destroy(gun->pitch_servo);
-    if (gun->yaw_servo) servo_destroy(gun->yaw_servo);
     
     // Free rates array
     if (gun->rates) free(gun->rates);
@@ -558,26 +590,6 @@ bool gun_fx_is_firing(GunFX *gun) {
     return atomic_load(&gun->is_firing);
 }
 
-/* Removed duplicate simple setter; keep mutex-protected version below */
-
-Servo* gun_fx_get_pitch_servo(GunFX *gun) {
-    if (!gun) return nullptr;
-    return gun->pitch_servo;
-}
-
-Servo* gun_fx_get_yaw_servo(GunFX *gun) {
-    if (!gun) return nullptr;
-    return gun->yaw_servo;
-}
-
-void gun_fx_set_smoke_fan_off_delay(GunFX *gun, int delay_ms) {
-    if (!gun) return;
-    
-    gun->smoke_fan_off_delay_ms = delay_ms;
-    
-    LOG_INFO(LOG_GUN, "Smoke fan off delay set to %d ms", delay_ms);
-}
-
 // Getter functions for status display
 int gun_fx_get_trigger_pwm(GunFX *gun) {
     if (!gun || !gun->trigger_pwm_monitor) return -1;
@@ -613,10 +625,6 @@ int gun_fx_get_pitch_pin(GunFX *gun) {
     return gun ? gun->pitch_pwm_pin : -1;
 }
 
-int gun_fx_get_pitch_output_pin(GunFX *gun) {
-    return gun ? gun->pitch_output_pin : -1;
-}
-
 int gun_fx_get_yaw_pwm(GunFX *gun) {
     if (!gun || !gun->yaw_pwm_monitor) return -1;
     int avg;
@@ -625,24 +633,4 @@ int gun_fx_get_yaw_pwm(GunFX *gun) {
 
 int gun_fx_get_yaw_pin(GunFX *gun) {
     return gun ? gun->yaw_pwm_pin : -1;
-}
-
-int gun_fx_get_yaw_output_pin(GunFX *gun) {
-    return gun ? gun->yaw_output_pin : -1;
-}
-
-int gun_fx_get_nozzle_flash_pin(GunFX *gun) {
-    return gun ? gun->nozzle_flash_pin : -1;
-}
-
-int gun_fx_get_smoke_fan_pin(GunFX *gun) {
-    return gun ? gun->smoke_fan_pin : -1;
-}
-
-int gun_fx_get_smoke_heater_pin(GunFX *gun) {
-    return gun ? gun->smoke_heater_pin : -1;
-}
-
-bool gun_fx_get_smoke_fan_pending_off(GunFX *gun) {
-    return gun ? atomic_load(&gun->smoke_fan_pending_off) : false;
 }
