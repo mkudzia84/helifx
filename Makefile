@@ -1,5 +1,5 @@
-# Parallel build - use 4 cores
-MAKEFLAGS = -j 4
+# Parallel build disabled (set -j manually if desired)
+# MAKEFLAGS = -j 4
 
 # Compiler settings
 CC = gcc
