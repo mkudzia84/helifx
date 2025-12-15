@@ -745,7 +745,8 @@ struct PWMEmitter {
 static int pwm_emitter_thread_func(void *arg) {
     PWMEmitter *em = (PWMEmitter *)arg;
     LOG_INFO(LOG_GPIO, "PWM emitter thread started for pin %d", em->pin);
-
+    long long frame_count = 0;
+    struct timespec last_dbg = {0, 0};
     while (atomic_load(&em->active)) {
         struct timespec start_ts, now;
         clock_gettime(CLOCK_MONOTONIC, &start_ts);
@@ -758,10 +759,15 @@ static int pwm_emitter_thread_func(void *arg) {
         if (width_us < 0) width_us = 0;
         if (width_us > period_us) width_us = period_us;
 
+        long high_elapsed_us = 0;
         if (width_us > 0) {
             gpio_write(em->pin, true);
             struct timespec high_sleep = {0, (long)width_us * 1000L};
             nanosleep(&high_sleep, NULL);
+            struct timespec high_end_ts;
+            clock_gettime(CLOCK_MONOTONIC, &high_end_ts);
+            high_elapsed_us = (long)((high_end_ts.tv_sec - start_ts.tv_sec) * 1000000L +
+                                     (high_end_ts.tv_nsec - start_ts.tv_nsec) / 1000L);
         }
 
         gpio_write(em->pin, false);
@@ -769,10 +775,31 @@ static int pwm_emitter_thread_func(void *arg) {
         clock_gettime(CLOCK_MONOTONIC, &now);
         long elapsed_us = (long)((now.tv_sec - start_ts.tv_sec) * 1000000L +
                                  (now.tv_nsec - start_ts.tv_nsec) / 1000L);
-        long remain_us = period_us - elapsed_us;
+        long remain_us = period_us - elapsed_us; // time left to complete frame
         if (remain_us > 0) {
             struct timespec low_sleep = {0, remain_us * 1000L};
             nanosleep(&low_sleep, NULL);
+        }
+
+        frame_count++;
+
+        // Every ~10s, dump timing info for this emitter
+        struct timespec dbg_now;
+        clock_gettime(CLOCK_MONOTONIC, &dbg_now);
+        if (last_dbg.tv_sec == 0 && last_dbg.tv_nsec == 0) {
+            last_dbg = dbg_now;
+        } else {
+            long long dbg_elapsed_s = (dbg_now.tv_sec - last_dbg.tv_sec);
+            if (dbg_elapsed_s >= 10) {
+                LOG_DEBUG(LOG_GPIO,
+                          "PWM dbg pin %d: freq=%dHz period=%dus t0=0us high=%ldus low_start=%ldus low_sleep=%ldus frames=%lld",
+                          em->pin, freq, period_us,
+                          high_elapsed_us,
+                          elapsed_us,
+                          remain_us,
+                          frame_count);
+                last_dbg = dbg_now;
+            }
         }
     }
 
