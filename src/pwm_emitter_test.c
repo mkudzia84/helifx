@@ -15,22 +15,30 @@ static void handle_sigint(int sig) {
 
 int main(int argc, char *argv[]) {
     if (argc < 2) {
-        fprintf(stderr, "Usage: %s <gpio_pin> [freq_hz] [--verbose]\n", argv[0]);
+        fprintf(stderr, "Usage: %s <gpio_pin> [--freq HZ] [--width US] [--verbose]\n", argv[0]);
+        fprintf(stderr, "  Examples:\n");
+        fprintf(stderr, "    %s 8 --verbose               (50Hz sweep 1000-2000us)\n", argv[0]);
+        fprintf(stderr, "    %s 8 --freq 100              (100Hz sweep)\n", argv[0]);
+        fprintf(stderr, "    %s 8 --width 1500 --verbose  (hold 1500us at 50Hz)\n", argv[0]);
         return 1;
     }
 
     int pin = atoi(argv[1]);
     int freq_hz = 0;
+    int width_us = 0; // if >0, hold fixed width
     int verbose = 0;
-    if (argc >= 3) {
-        if (strcmp(argv[2], "--verbose") == 0 || strcmp(argv[2], "-v") == 0) {
+    // Parse simple flags: --freq N, --width N, --verbose/-v
+    for (int i = 2; i < argc; i++) {
+        if (strcmp(argv[i], "--verbose") == 0 || strcmp(argv[i], "-v") == 0) {
             verbose = 1;
+        } else if (strcmp(argv[i], "--freq") == 0 && i + 1 < argc) {
+            freq_hz = atoi(argv[++i]);
+        } else if (strcmp(argv[i], "--width") == 0 && i + 1 < argc) {
+            width_us = atoi(argv[++i]);
         } else {
-            freq_hz = atoi(argv[2]);
+            fprintf(stderr, "Unknown or incomplete argument: %s\n", argv[i]);
+            return 1;
         }
-    }
-    if (argc >= 4 && (strcmp(argv[3], "--verbose") == 0 || strcmp(argv[3], "-v") == 0)) {
-        verbose = 1;
     }
 
     signal(SIGINT, handle_sigint);
@@ -41,10 +49,14 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    if (freq_hz > 0) {
-        LOG_INFO(LOG_SYSTEM, "PWM emitter test starting on GPIO %d at %d Hz", pin, freq_hz);
+    if (freq_hz > 0 && width_us > 0) {
+        LOG_INFO(LOG_SYSTEM, "PWM emitter test on GPIO %d at %d Hz, width %d us", pin, freq_hz, width_us);
+    } else if (freq_hz > 0) {
+        LOG_INFO(LOG_SYSTEM, "PWM emitter test on GPIO %d at %d Hz (sweep mode)", pin, freq_hz);
+    } else if (width_us > 0) {
+        LOG_INFO(LOG_SYSTEM, "PWM emitter test on GPIO %d (50 Hz default), width %d us", pin, width_us);
     } else {
-        LOG_INFO(LOG_SYSTEM, "PWM emitter test starting on GPIO %d (default 50 Hz)", pin);
+        LOG_INFO(LOG_SYSTEM, "PWM emitter test on GPIO %d (50 Hz default, sweep mode)", pin);
     }
 
     int exit_code = 0;
@@ -65,38 +77,54 @@ int main(int argc, char *argv[]) {
     if (freq_hz > 0) {
         pwm_emitter_set_frequency(emitter, freq_hz);
     }
-
-    // Cycle from 1000us to 2000us and back, full cycle every 5 seconds
-    const int min_us = 1000;
-    const int max_us = 2000;
-    const int step_ms = 25;          // 25ms step -> ~5s full sweep (2.5s each direction)
-    int direction = 1;
-    int value = min_us;
-    int step_count = 0;
-
-    while (running) {
-        if (pwm_emitter_set_value(emitter, value) != 0) {
-            LOG_ERROR(LOG_SYSTEM, "Failed to set PWM value to %d us", value);
+    if (width_us > 0) {
+        // Fixed-width mode
+        if (pwm_emitter_set_value(emitter, width_us) != 0) {
+            LOG_ERROR(LOG_SYSTEM, "Failed to set PWM width to %d us", width_us);
             exit_code = 1;
-            break;
+            goto cleanup;
         }
-
-        if (verbose && (step_count % 20 == 0)) {
-            LOG_INFO(LOG_SYSTEM, "PWM value: %d us", value);
+        int tick = 0;
+        while (running) {
+            if (verbose && (tick % 20 == 0)) {
+                LOG_INFO(LOG_SYSTEM, "PWM width: %d us (freq: %d Hz)", pwm_emitter_get_value(emitter), pwm_emitter_get_frequency(emitter));
+            }
+            tick++;
+            usleep(25 * 1000); // keep modest console rate
         }
-        step_count++;
+    } else {
+        // Sweep mode: Cycle from 1000us to 2000us and back, ~5s full cycle
+        const int min_us = 1000;
+        const int max_us = 2000;
+        const int step_ms = 25;          // 25ms step -> ~5s full sweep (2.5s each direction)
+        int direction = 1;
+        int value = min_us;
+        int step_count = 0;
 
-        // Update value
-        value += direction * 10; // 10us per step
-        if (value >= max_us) {
-            value = max_us;
-            direction = -1;
-        } else if (value <= min_us) {
-            value = min_us;
-            direction = 1;
+        while (running) {
+            if (pwm_emitter_set_value(emitter, value) != 0) {
+                LOG_ERROR(LOG_SYSTEM, "Failed to set PWM value to %d us", value);
+                exit_code = 1;
+                break;
+            }
+
+            if (verbose && (step_count % 20 == 0)) {
+                LOG_INFO(LOG_SYSTEM, "PWM value: %d us", value);
+            }
+            step_count++;
+
+            // Update value
+            value += direction * 10; // 10us per step
+            if (value >= max_us) {
+                value = max_us;
+                direction = -1;
+            } else if (value <= min_us) {
+                value = min_us;
+                direction = 1;
+            }
+
+            usleep(step_ms * 1000);
         }
-
-        usleep(step_ms * 1000);
     }
 
     LOG_INFO(LOG_SYSTEM, "Stopping PWM emitter test");
