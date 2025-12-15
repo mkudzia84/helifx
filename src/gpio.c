@@ -242,8 +242,8 @@ int gpio_write(int pin, bool value) {
         return -1;
     }
     
-    // Single-line requests use index 0 (not the global pin number) for set_value in libgpiod v2.x
-    int result = gpiod_line_request_set_value(request, 0, value ? GPIOD_LINE_VALUE_ACTIVE : GPIOD_LINE_VALUE_INACTIVE);
+    // libgpiod v2.x set_value expects the requested line's global offset
+    int result = gpiod_line_request_set_value(request, (unsigned int)pin, value ? GPIOD_LINE_VALUE_ACTIVE : GPIOD_LINE_VALUE_INACTIVE);
     if (result < 0) {
         LOG_ERROR(LOG_GPIO, "Failed to write GPIO %d: %s", pin, strerror(errno));
         return -1;
@@ -269,8 +269,8 @@ bool gpio_read(int pin) {
         return false;
     }
     
-    // Single-line requests use index 0 (not the global pin number) for get_value in libgpiod v2.x
-    enum gpiod_line_value value = gpiod_line_request_get_value(request, 0);
+    // libgpiod v2.x get_value expects the requested line's global offset
+    enum gpiod_line_value value = gpiod_line_request_get_value(request, (unsigned int)pin);
     if (value == GPIOD_LINE_VALUE_ERROR) {
         LOG_ERROR(LOG_GPIO, "Failed to read GPIO %d: %s", pin, strerror(errno));
         return false;
