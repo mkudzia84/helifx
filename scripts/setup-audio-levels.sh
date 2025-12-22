@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# HeliFX Audio Setup Script
+# ScaleFX Audio Setup Script
 # Sets ALSA mixer levels for WM8960 Audio HAT or DigiAMP+
 # Automatically detects and configures all compatible audio cards
 # 
@@ -27,7 +27,7 @@ done
 log() { echo "[AUDIO-SETUP] $1"; }
 log_verbose() { [ $VERBOSE -eq 1 ] && echo "[AUDIO-SETUP] $1"; }
 
-log "HeliFX Audio Level Setup"
+log "ScaleFX Audio Level Setup"
 
 # Function to configure a specific card
 configure_card() {

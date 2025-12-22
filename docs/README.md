@@ -1,6 +1,6 @@
-# Helicopter FX System
+# ScaleFX Hub System
 
-Integrated sound and effects system for Kamov KA-50 helicopter RC model, featuring synchronized engine sounds, gun effects, nozzle flash LED, and smoke generation.
+Integrated sound and effects system for scale RC models, featuring synchronized engine sounds, gun effects, nozzle flash LED, and smoke generation.
 
 ## Features
 
@@ -15,15 +15,9 @@ Integrated sound and effects system for Kamov KA-50 helicopter RC model, featuri
 - **PWM trigger control** with hysteresis to prevent oscillation
 - **Synchronized nozzle flash LED** blinking at firing rate
 - **Looping gun sounds** for each rate of fire
-- **Smoke generator control** with configurable fan-off delay
+- **Smoke generator control** (fan-off delay handled by Pico firmware)
 - **Independent smoke heater toggle** via PWM input
 - **Turret servo control** with smooth motion limits (pitch and yaw axes)
-
-### Telemetry
-- **JetiEX protocol support** for real-time telemetry transmission
-- **Configurable sensors**: Gun RPM, engine RPM, voltage, temperature, etc.
-- **Text messages** to transmitter display
-- **UART-based communication** to Jeti receivers
 
 ### Audio System
 - Multi-channel audio mixer (8 channels)
@@ -34,7 +28,8 @@ Integrated sound and effects system for Kamov KA-50 helicopter RC model, featuri
 - **Raspberry Pi** (tested on Pi 4)
 - **WM8960 Audio HAT** for high-quality audio output
 - **GPIO-based PWM monitoring** for RC receiver inputs
-- **LED and smoke generator control** via GPIO
+- **Gun controller via USB CDC** (Raspberry Pi Pico with custom VID/PID)
+- **LED and smoke generator control** managed on Pico; Pi coordinates effects
 
 ## Hardware Requirements
 
@@ -58,17 +53,19 @@ Integrated sound and effects system for Kamov KA-50 helicopter RC model, featuri
    sudo systemctl start pigpiod  # Start if not running
    ```
 
-2. **Run helifx with sudo:**
+2. **Run sfxhub with sudo:**
    ```bash
-   sudo ./build/helifx config.yaml
+   sudo ./build/sfxhub config.yaml
    ```
    
    Or use the systemd service (recommended):
    ```bash
-   sudo systemctl start helifx
+   sudo systemctl start sfxhub
    ```
 
 **Important:** The installation script automatically configures pigpiod with WM8960 Audio HAT pin exclusions. Audio should work without additional configuration.
+
+**USB Gun Controller:** Plug in the Raspberry Pi Pico-based gun controller. It enumerates as a USB CDC device with VID `0x2e8a` (Raspberry Pi) and PID `0x0180` (gunfx). sfxhub auto-detects and opens the device; no serial port configuration is needed in YAML.
 
 See [Troubleshooting](#troubleshooting) for more details.
 
@@ -87,6 +84,8 @@ See [WIRING.md](WIRING.md) for complete wiring diagrams and pin assignments.
 - **Pitch Servo PWM Output:** GPIO 7
 - **Yaw Servo PWM Input:** GPIO 16
 - **Yaw Servo PWM Output:** GPIO 8
+
+Note: Gun outputs (nozzle flash LED, smoke fan, smoke heater, turret servos) are driven by the Pico firmware. The Pi reads PWM inputs and coordinates sounds and commands over USB; direct GPIO control of these outputs on the Pi is no longer required.
 
 **Reserved Pins (WM8960 Audio HAT):**
 - GPIO 2, 3: I2C (SCL, SDA)
@@ -119,7 +118,7 @@ sudo apt-get install -y \
 
 **pigpio Configuration:**
 
-helifx uses the **pigpiod daemon** for GPIO control. The installation script automatically:
+sfxhub uses the **pigpiod daemon** for GPIO control. The installation script automatically:
 
 1. Installs pigpio and pigpiod
 2. Configures pigpiod with WM8960 Audio HAT pin exclusions
@@ -132,7 +131,7 @@ The exclusion mask `0x3C000C` prevents pigpiod from controlling GPIO 2,3,18-21 (
 **Important:** Install dependencies first (see Prerequisites above) before building.
 
 ```bash
-cd helifx
+cd scalefx
 make
 ```
 
@@ -160,7 +159,7 @@ sudo ./scripts/install.sh username
 
 The script will:
 - Install all dependencies
-- Copy binaries to `/home/<user>/helifx`
+- Copy binaries to `/home/<user>/scalefx`
 - Install systemd service with correct user
 - Optionally enable auto-start on boot
 - Create directory structure for assets and logs
@@ -171,31 +170,31 @@ The script will:
 
 ```bash
 # Create directory structure
-sudo mkdir -p /home/pi/helifx/assets
-sudo mkdir -p /home/pi/helifx/logs
+sudo mkdir -p /home/pi/scalefx/assets
+sudo mkdir -p /home/pi/scalefx/logs
 
 # Copy files (from build directory)
-sudo cp build/helifx /home/pi/helifx/
-sudo cp config.yaml /home/pi/helifx/
+sudo cp build/sfxhub /home/pi/scalefx/
+sudo cp config.yaml /home/pi/scalefx/
 
 # Copy your sound files
-sudo cp your_sounds/* /home/pi/helifx/assets/
+sudo cp your_sounds/* /home/pi/scalefx/assets/
 
 # Set ownership
-sudo chown -R pi:pi /home/pi/helifx
+sudo chown -R pi:pi /home/pi/scalefx
 
 # Install systemd service (update User, Group, and paths in service file if needed)
-sudo cp scripts/helifx.service /etc/systemd/system/
+sudo cp scripts/sfxhub.service /etc/systemd/system/
 sudo systemctl daemon-reload
 
 # Enable and start service
-sudo systemctl enable helifx
-sudo systemctl start helifx
+sudo systemctl enable sfxhub
+sudo systemctl start sfxhub
 ```
 
 ### Uninstallation
 
-To remove the Helicopter FX system:
+To remove the ScaleFX Hub system:
 
 ```bash
 # Uninstall for default user (pi)
@@ -212,7 +211,7 @@ The script will:
 
 ## Configuration
 
-Edit `/home/pi/helifx/config.yaml` to customize:
+Edit `/home/pi/scalefx/config.yaml` to customize:
 
 ### Engine FX Configuration
 ```yaml
@@ -240,24 +239,19 @@ gun_fx:
   trigger:
     pin: 27
   
-  nozzle_flash:
-    enabled: true
-    pin: 23
-  
+  # Outputs (nozzle flash, smoke fan/heater) are controlled by the Pico.
+  # The Pi no longer requires GPIO pin assignments for these.
   smoke:
     enabled: true
-    fan_pin: 24
-    heater_pin: 25
     heater_toggle_pin: 22
     heater_pwm_threshold_us: 1500
-    fan_off_delay_ms: 2000
   
   # Turret Control Servos
   turret_control:
     pitch:
       enabled: true           # Enable pitch axis servo control
       pwm_pin: 13             # GPIO 13 - PWM input from RC receiver
-      output_pin: 7           # GPIO 7 - PWM output to servo
+      # Output is commanded to Pico; Pi does not drive servo directly
       input_min_us: 1000      # Minimum input PWM pulse width (µs)
       input_max_us: 2000      # Maximum input PWM pulse width (µs)
       output_min_us: 1000     # Minimum output PWM pulse width (µs)
@@ -269,7 +263,7 @@ gun_fx:
     yaw:
       enabled: true           # Enable yaw axis servo control
       pwm_pin: 16             # GPIO 16 - PWM input from RC receiver
-      output_pin: 8           # GPIO 8 - PWM output to servo
+      # Output is commanded to Pico; Pi does not drive servo directly
       input_min_us: 1000      # Minimum input PWM pulse width (µs)
       input_max_us: 2000      # Maximum input PWM pulse width (µs)
       output_min_us: 1000     # Minimum output PWM pulse width (µs)
@@ -299,9 +293,17 @@ PWM thresholds are in microseconds (typical RC PWM range: 1000-2000µs):
 
 Use a servo tester or RC receiver to measure your actual PWM values and adjust accordingly.
 
+### Optional Modules
+
+Both `engine_fx` and `gun_fx` sections are optional in `config.yaml`. If omitted, the corresponding subsystem is disabled. The status display and initialization logic adapt automatically.
+
+### USB Auto-Detection
+
+The gun controller is auto-detected by VID/PID and opened over USB CDC. No serial port configuration is required in YAML.
+
 ### Sound Files
 
-Place your sound files in `/home/pi/helifx/assets/` directory:
+Place your sound files in `/home/pi/scalefx/assets/` directory:
 - Engine sounds should be WAV format, 44.1kHz recommended
 - Gun sounds should loop seamlessly
 - Paths support `~` expansion for home directory
@@ -312,38 +314,38 @@ Place your sound files in `/home/pi/helifx/assets/` directory:
 
 ```bash
 # Start service
-sudo systemctl start helifx
+sudo systemctl start sfxhub
 
 # Stop service
-sudo systemctl stop helifx
+sudo systemctl stop sfxhub
 
 # Restart service
-sudo systemctl restart helifx
+sudo systemctl restart sfxhub
 
 # View status
-sudo systemctl status helifx
+sudo systemctl status sfxhub
 
 # View live logs
-sudo journalctl -u helifx -f
+sudo journalctl -u sfxhub -f
 
 # Enable auto-start on boot
-sudo systemctl enable helifx
+sudo systemctl enable sfxhub
 
 # Disable auto-start
-sudo systemctl disable helifx
+sudo systemctl disable sfxhub
 ```
 
 ### Manual Execution
 
 ```bash
-cd /home/pi/helifx
-./helifx config.yaml
+cd /home/pi/scalefx
+./sfxhub config.yaml
 ```
 
 Or from the build directory during development:
 ```bash
-cd helifx
-./build/helifx config.yaml
+cd scalefx
+./build/sfxhub config.yaml
 ```
 
 Press `Ctrl+C` to stop.
@@ -363,13 +365,13 @@ The status dump includes:
 View logs:
 ```bash
 # Live logs
-sudo journalctl -u helifx -f
+sudo journalctl -u sfxhub -f
 
 # Last 100 lines
-sudo journalctl -u helifx -n 100
+sudo journalctl -u sfxhub -n 100
 
 # Today's logs
-sudo journalctl -u helifx --since today
+sudo journalctl -u sfxhub --since today
 ```
 
 ## Troubleshooting
@@ -414,14 +416,14 @@ cat /etc/systemd/system/pigpiod.service.d/override.conf
 # Should show: ExecStart=/usr/bin/pigpiod -l -x 0x3C000C
 ```
 
-**Then run helifx with sudo:**
+**Then run sfxhub with sudo:**
 ```bash
-sudo ./helifx config.yaml
+sudo ./sfxhub config.yaml
 ```
 
 Or use the systemd service (recommended):
 ```bash
-sudo systemctl start helifx
+sudo systemctl start sfxhub
 ```
 
 ### PWM Not Detected
@@ -453,7 +455,7 @@ sudo systemctl start helifx
 
 Check logs for errors:
 ```bash
-sudo journalctl -u helifx -n 50
+sudo journalctl -u sfxhub -n 50
 ```
 
 Common issues:
@@ -467,7 +469,7 @@ Common issues:
 ### Building
 
 ```bash
-make             # Build helifx
+make             # Build sfxhub
 make clean       # Clean build artifacts
 make help        # Show all available targets
 ```
@@ -475,7 +477,7 @@ make help        # Show all available targets
 ### Project Structure
 
 ```
-helifx/
+scalefx/
 ├── src/                   # Source files (.c)
 │   ├── main.c             # Main application entry point
 │   ├── config_loader.c    # YAML configuration parser
@@ -496,10 +498,10 @@ helifx/
 │   ├── miniaudio.h
 │   └── pwm_monitor.h
 ├── build/                 # Build output (generated)
-│   ├── helifx             # Main binary
+│   ├── sfxhub             # Main binary
 │   └── *.o                # Object files
 ├── scripts/               # Installation and service scripts
-│   ├── helifx.service     # Systemd service unit
+│   ├── sfxhub.service     # Systemd service unit
 │   ├── install.sh         # Installation script
 │   └── uninstall.sh       # Uninstallation script
 ├── docs/                  # Documentation
@@ -541,7 +543,6 @@ Additional documentation available:
 - [C23 Migration Guide](C23_MIGRATION.md) - C23 standard migration details and compiler requirements
 - [Wiring Guide](WIRING.md) - Complete wiring diagrams and hardware setup
 - [Logging System](LOGGING.md) - Logging architecture and usage guide
-- [JetiEX Telemetry](JETIEX.md) - Telemetry integration and configuration
 
 ## License
 

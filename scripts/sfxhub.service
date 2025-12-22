@@ -1,5 +1,5 @@
 [Unit]
-Description=Helicopter FX System
+Description=ScaleFX Hub System
 After=network.target sound.target alsa-restore.service multi-user.target
 DefaultDependencies=no
 
@@ -9,7 +9,7 @@ User={{USER}}
 Group={{USER}}
 SupplementaryGroups=audio gpio
 WorkingDirectory={{INSTALL_DIR}}
-ExecStart={{INSTALL_DIR}}/helifx {{CONFIG_PATH}}
+ExecStart={{INSTALL_DIR}}/sfxhub {{CONFIG_PATH}}
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal

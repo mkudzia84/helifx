@@ -1,14 +1,14 @@
 [Unit]
-Description=HeliFX Audio Level Setup
-Documentation=https://github.com/yourusername/helifx
+Description=ScaleFX Hub Audio Level Setup
+Documentation=https://github.com/yourusername/scalefx
 DefaultDependencies=no
 After=multi-user.target sound.target graphical.target systemd-user-sessions.service
-Before=helifx.service
+Before=sfxhub.service
 Wants=multi-user.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/bin/helifx-audio-setup --verbose
+ExecStart=/usr/local/bin/sfxhub-audio-setup --verbose
 RemainAfterExit=yes
 
 [Install]

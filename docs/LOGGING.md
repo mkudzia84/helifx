@@ -2,7 +2,7 @@
 
 ## Overview
 
-The HeliFX system uses a unified, component-based logging system for consistent output across all modules. This document explains the logging infrastructure, best practices, and how to use it.
+The ScaleFX Hub system uses a unified, component-based logging system for consistent output across all modules. This document explains the logging infrastructure, best practices, and how to use it.
 
 ## Logging Levels
 
@@ -70,7 +70,7 @@ Each component has a standard prefix for easy log filtering:
 
 | Component | Prefix | File | Notes |
 |-----------|--------|------|-------|
-| Main System | `LOG_HELIFX` | main.c | System-level events |
+| Main System | `LOG_SFXHUB` | main.c | System-level events |
 | Configuration | `LOG_CONFIG` | config_loader.c | Configuration loading |
 | Engine FX | `LOG_ENGINE` | engine_fx.c | Engine sound effects |
 | Gun FX | `LOG_GUN` | gun_fx.c | Gun effects controller |
@@ -78,7 +78,6 @@ Each component has a standard prefix for easy log filtering:
 | Audio System | `LOG_AUDIO` | audio_player.c | Audio mixing/playback |
 | Smoke System | `LOG_SMOKE` | smoke_generator.c | Smoke generator control |
 | GPIO | `LOG_GPIO` | gpio.c | GPIO abstraction layer |
-| Demo Programs | `LOG_DEMO` | *_demo.c files | Demo application logs |
 
 ## Specialized Logging Macros
 
@@ -163,16 +162,16 @@ LOG_SHUTDOWN(LOG_SERVO, "Servo instance");
 ### Using journalctl
 ```bash
 # View only gun-related messages
-sudo journalctl -u helifx | grep "\[GUN\]"
+sudo journalctl -u sfxhub | grep "\[GUN\]"
 
 # View only servo messages
-sudo journalctl -u helifx | grep "\[SERVO\]"
+sudo journalctl -u sfxhub | grep "\[SERVO\]"
 
 # View only errors
-sudo journalctl -u helifx | grep "Error:"
+sudo journalctl -u sfxhub | grep "Error:"
 
 # View only warnings
-sudo journalctl -u helifx | grep "Warning:"
+sudo journalctl -u sfxhub | grep "Warning:"
 ```
 
 ### Using grep
@@ -282,21 +281,21 @@ GUN FX: ✓ ENABLED
 
 ════════════════════════════════════════════════════════════════
 
-[HELIFX] Initializing Engine FX...
+[SFXHUB] Initializing Engine FX...
 [ENGINE] PWM monitoring started on pin 17 (threshold: 1500 us)
 [ENGINE] Engine FX created (channel: 0)
-[HELIFX] Engine FX initialized
+[SFXHUB] Engine FX initialized
 
-[HELIFX] Initializing Gun FX...
+[SFXHUB] Initializing Gun FX...
 [GUN]    Nozzle flash LED initialized on GPIO 23
 [GUN]    Smoke generator initialized (heater GPIO 25, fan GPIO 24)
 [GUN]    Trigger PWM monitoring started on GPIO 27
 [GUN]    Pitch servo (input pin: 13, output pin: 7)
 [GUN]    Yaw servo (input pin: 16, output pin: 8)
 [GUN]    Gun FX created
-[HELIFX] Gun FX initialized with 2 rates
+[SFXHUB] Gun FX initialized with 2 rates
 
-[HELIFX] System ready. Press Ctrl+C to exit.
+[SFXHUB] System ready. Press Ctrl+C to exit.
 ```
 
 ### Runtime Operation
@@ -317,13 +316,13 @@ GUN FX: ✓ ENABLED
 
 ### Shutdown
 ```
-[HELIFX] Shutting down...
-[HELIFX] Cleaning up...
+[SFXHUB] Shutting down...
+[SFXHUB] Cleaning up...
 [GUN]    Processing thread stopped
 [GUN]    Shutdown: Gun FX system
 [ENGINE] Processing thread stopped
 [ENGINE] Shutdown: Engine FX system
-[HELIFX] Shutdown complete.
+[SFXHUB] Shutdown complete.
 ```
 
 ## Troubleshooting

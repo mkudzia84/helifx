@@ -39,9 +39,6 @@
 #define DEFAULT_SERVO_MAX_ACCEL_US_PER_SEC2 8000.0f // 8000 µs/sec²
 #define DEFAULT_SERVO_MAX_DECEL_US_PER_SEC2 8000.0f // 8000 µs/sec²
 
-// JetiEX Defaults
-#define DEFAULT_JETIEX_UPDATE_RATE_HZ       5       // 5 Hz telemetry rate
-
 /* ============================================================================
  * CYAML Schema Definitions
  * ============================================================================ */
@@ -171,16 +168,16 @@ static const cyaml_schema_value_t gun_fx_schema __attribute__((unused)) = {
 
 
 
-// Root HeliFXConfig schema
-static const cyaml_schema_field_t helifx_config_fields[] = {
+// Root ScaleFXConfig schema
+static const cyaml_schema_field_t scalefx_config_fields[] = {
     // Make both modules optional; missing sections imply disabled
-    CYAML_FIELD_MAPPING("engine_fx", CYAML_FLAG_DEFAULT | CYAML_FLAG_OPTIONAL, HeliFXConfig, engine, engine_fx_fields),
-    CYAML_FIELD_MAPPING("gun_fx", CYAML_FLAG_DEFAULT | CYAML_FLAG_OPTIONAL, HeliFXConfig, gun, gun_fx_fields),
+    CYAML_FIELD_MAPPING("engine_fx", CYAML_FLAG_DEFAULT | CYAML_FLAG_OPTIONAL, ScaleFXConfig, engine, engine_fx_fields),
+    CYAML_FIELD_MAPPING("gun_fx", CYAML_FLAG_DEFAULT | CYAML_FLAG_OPTIONAL, ScaleFXConfig, gun, gun_fx_fields),
     CYAML_FIELD_END
 };
 
-static const cyaml_schema_value_t helifx_config_schema = {
-    CYAML_VALUE_MAPPING(CYAML_FLAG_POINTER, HeliFXConfig, helifx_config_fields),
+static const cyaml_schema_value_t scalefx_config_schema = {
+    CYAML_VALUE_MAPPING(CYAML_FLAG_POINTER, ScaleFXConfig, scalefx_config_fields),
 };
 
 /* ============================================================================
@@ -201,7 +198,7 @@ static const cyaml_config_t cyaml_config = {
 #define APPLY_DEFAULT_IF_ZERO(field, default_value) \
     if ((field) == 0) (field) = (default_value)
 
-static inline void apply_defaults_inline(HeliFXConfig *config) {
+static inline void apply_defaults_inline(ScaleFXConfig *config) {
     // Engine defaults
     APPLY_DEFAULT_IF_ZERO(config->engine.engine_toggle.threshold_us, DEFAULT_ENGINE_THRESHOLD_US);
     APPLY_DEFAULT_IF_ZERO(config->engine.sounds.transitions.starting_offset_ms, DEFAULT_ENGINE_STARTING_OFFSET_MS);
@@ -240,13 +237,13 @@ static inline void apply_defaults_inline(HeliFXConfig *config) {
  * Public Functions
  * ============================================================================ */
 
-HeliFXConfig* config_load(const char *config_file) {
+ScaleFXConfig* config_load(const char *config_file) {
     cyaml_err_t err;
-    HeliFXConfig *config = nullptr;
+    ScaleFXConfig *config = nullptr;
 
     LOG_INFO(LOG_CONFIG, "Loading configuration from: %s", config_file);
 
-    err = cyaml_load_file(config_file, &cyaml_config, &helifx_config_schema,
+    err = cyaml_load_file(config_file, &cyaml_config, &scalefx_config_schema,
                           (cyaml_data_t **)&config, nullptr);
 
     if (err != CYAML_OK) {
@@ -261,12 +258,12 @@ HeliFXConfig* config_load(const char *config_file) {
     return config;
 }
 
-int config_save(const char *config_file, const HeliFXConfig *config) {
+int config_save(const char *config_file, const ScaleFXConfig *config) {
     cyaml_err_t err;
 
     LOG_INFO(LOG_CONFIG, "Saving configuration to: %s", config_file);
 
-    err = cyaml_save_file(config_file, &cyaml_config, &helifx_config_schema,
+    err = cyaml_save_file(config_file, &cyaml_config, &scalefx_config_schema,
                           (cyaml_data_t *)config, 0);
 
     if (err != CYAML_OK) {
@@ -278,13 +275,13 @@ int config_save(const char *config_file, const HeliFXConfig *config) {
     return 0;
 }
 
-void config_free(HeliFXConfig *config) {
+void config_free(ScaleFXConfig *config) {
     if (config) {
-        cyaml_free(&cyaml_config, &helifx_config_schema, config, 0);
+        cyaml_free(&cyaml_config, &scalefx_config_schema, config, 0);
     }
 }
 
-int config_validate(const HeliFXConfig *config) {
+int config_validate(const ScaleFXConfig *config) {
     if (!config) {
         LOG_ERROR(LOG_CONFIG, "Validation failed: nullptr config");
         return -1;
@@ -345,7 +342,7 @@ int config_validate(const HeliFXConfig *config) {
     return 0;
 }
 
-void config_print(const HeliFXConfig *config) {
+void config_print(const ScaleFXConfig *config) {
     if (!config) {
         LOG_ERROR(LOG_CONFIG, "Cannot print nullptr config");
         return;
@@ -362,7 +359,7 @@ void config_print(const HeliFXConfig *config) {
     
     printf("\n");
     printf(COLOR_CYAN COLOR_BOLD "╔════════════════════════════════════════════════════════════════╗\n" COLOR_RESET);
-    printf(COLOR_CYAN COLOR_BOLD "║         HeliFX Configuration Loaded Successfully                ║\n" COLOR_RESET);
+    printf(COLOR_CYAN COLOR_BOLD "║         ScaleFX Configuration Loaded Successfully               ║\n" COLOR_RESET);
     printf(COLOR_CYAN COLOR_BOLD "╚════════════════════════════════════════════════════════════════╝\n" COLOR_RESET);
     printf("\n");
     

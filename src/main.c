@@ -1,10 +1,10 @@
 /**
- * Helicopter FX Main Application
+ * ScaleFX Hub - Main Application
  * 
- * Integrated engine and gun effects for KA-50 helicopter simulation
+ * Integrated engine and gun effects for scale model simulations
  * Reads configuration from YAML file and manages all effects
  * 
- * Usage: helifx <config.yaml>
+ * Usage: sfxhub <config.yaml>
  */
 
 #include "engine_fx.h"
@@ -24,7 +24,7 @@ static volatile bool running = true;
 
 void signal_handler(int signum) {
     (void)signum;
-    printf("\n[HELIFX] Shutting down...\n");
+    printf("\n[SFXHUB] Shutting down...\n");
     running = false;
 }
 
@@ -61,32 +61,32 @@ int main(int argc, char *argv[]) {
     // Initialize logging system based on mode
     if (interactive_mode) {
         // Interactive mode: log to file, status display on stdout
-        if (logging_init("/var/log/helifx.log", 10, 5) != 0) {
-            fprintf(stderr, "[HELIFX] Warning: Failed to initialize file logging\n");
-            fprintf(stderr, "[HELIFX] Falling back to console logging\n");
+        if (logging_init("/var/log/sfxhub.log", 10, 5) != 0) {
+            fprintf(stderr, "[SFXHUB] Warning: Failed to initialize file logging\n");
+            fprintf(stderr, "[SFXHUB] Falling back to console logging\n");
             logging_init(NULL, 0, 0);
             interactive_mode = false;  // Disable interactive mode if file logging fails
         } else {
-            fprintf(stderr, "[HELIFX] Interactive mode: Status display on stdout, logging to /var/log/helifx.log\n");
+            fprintf(stderr, "[SFXHUB] Interactive mode: Status display on stdout, logging to /var/log/sfxhub.log\n");
         }
     } else {
         // Non-interactive mode: log to console only
         logging_init(NULL, 0, 0);
-        fprintf(stderr, "[HELIFX] Console mode: Logging to stdout/stderr\n");
+        fprintf(stderr, "[SFXHUB] Console mode: Logging to stdout/stderr\n");
     }
     
-    LOG_INFO(LOG_HELIFX, "Starting HeliFX system...");
+    LOG_INFO(LOG_SFXHUB, "Starting ScaleFX Hub...");
     
     // Parse configuration
-    HeliFXConfig *config = config_load(config_file);
+    ScaleFXConfig *config = config_load(config_file);
     if (!config) {
-        LOG_ERROR(LOG_HELIFX, "Failed to load configuration file");
+        LOG_ERROR(LOG_SFXHUB, "Failed to load configuration file");
         return 1;
     }
     
     // Validate configuration
     if (config_validate(config) != 0) {
-        LOG_ERROR(LOG_HELIFX, "Configuration validation failed");
+        LOG_ERROR(LOG_SFXHUB, "Configuration validation failed");
         config_free(config);
         return 1;
     }
@@ -96,16 +96,16 @@ int main(int argc, char *argv[]) {
     
     // Initialize GPIO (required for PWM emitters, servo control, lights, and general GPIO)
     if (gpio_init() < 0) {
-        LOG_ERROR(LOG_HELIFX, "Failed to initialize GPIO");
-        LOG_ERROR(LOG_HELIFX, "Note: Try running with sudo for GPIO access");
+        LOG_ERROR(LOG_SFXHUB, "Failed to initialize GPIO");
+        LOG_ERROR(LOG_SFXHUB, "Note: Try running with sudo for GPIO access");
         return 1;
     }
-    LOG_INFO(LOG_HELIFX, "GPIO subsystem initialized (PWM emitters ready)");
+    LOG_INFO(LOG_SFXHUB, "GPIO subsystem initialized (PWM emitters ready)");
     
     // Create audio mixer (8 channels)
     AudioMixer *mixer = audio_mixer_create(8);
     if (!mixer) {
-        LOG_ERROR(LOG_HELIFX, "Failed to create audio mixer");
+        LOG_ERROR(LOG_SFXHUB, "Failed to create audio mixer");
         gpio_cleanup();
         return 1;
     }
@@ -113,7 +113,7 @@ int main(int argc, char *argv[]) {
     // Create sound manager
     SoundManager *sound_mgr = sound_manager_create();
     if (!sound_mgr) {
-        LOG_ERROR(LOG_HELIFX, "Failed to create sound manager");
+        LOG_ERROR(LOG_SFXHUB, "Failed to create sound manager");
         audio_mixer_destroy(mixer);
         gpio_cleanup();
         return 1;
@@ -126,7 +126,7 @@ int main(int argc, char *argv[]) {
                           (config->engine.sounds.running != NULL) ||
                           (config->engine.sounds.stopping != NULL);
     if (engine_present) {
-        LOG_INFO(LOG_HELIFX, "Initializing Engine FX...");
+        LOG_INFO(LOG_SFXHUB, "Initializing Engine FX...");
         
         // Load engine sounds (any may be null)
         sound_manager_load_sound(sound_mgr, SOUND_ENGINE_STARTING, config->engine.sounds.starting);
@@ -136,16 +136,16 @@ int main(int argc, char *argv[]) {
         // Create engine FX controller (audio channel 0)
         engine = engine_fx_create(mixer, 0, &config->engine);
         if (!engine) {
-            LOG_ERROR(LOG_HELIFX, "Failed to create engine FX controller");
+            LOG_ERROR(LOG_SFXHUB, "Failed to create engine FX controller");
         } else {
             engine_fx_load_sounds(engine, 
                 sound_manager_get_sound(sound_mgr, SOUND_ENGINE_STARTING),
                 sound_manager_get_sound(sound_mgr, SOUND_ENGINE_RUNNING),
                 sound_manager_get_sound(sound_mgr, SOUND_ENGINE_STOPPING));
-            LOG_INFO(LOG_HELIFX, "Engine FX initialized");
+            LOG_INFO(LOG_SFXHUB, "Engine FX initialized");
         }
     } else {
-        LOG_INFO(LOG_HELIFX, "Engine FX not configured; skipping initialization");
+        LOG_INFO(LOG_SFXHUB, "Engine FX not configured; skipping initialization");
     }
     
     // Initialize Gun FX if configured (optional)
@@ -156,7 +156,7 @@ int main(int argc, char *argv[]) {
                        (config->gun.turret_control.yaw.pwm_pin != 0) ||
                        (config->gun.smoke.heater_toggle_pin != 0);
     if (gun_present) {
-        LOG_INFO(LOG_HELIFX, "Initializing Gun FX...");
+        LOG_INFO(LOG_SFXHUB, "Initializing Gun FX...");
         
         // Load gun sounds (up to 10 rates supported)
         for (int i = 0; i < config->gun.rate_count && i < 10; i++) {
@@ -168,12 +168,12 @@ int main(int argc, char *argv[]) {
         gun = gun_fx_create(mixer, 1, &config->gun);
         
         if (!gun) {
-            LOG_ERROR(LOG_HELIFX, "Failed to create gun FX controller");
+            LOG_ERROR(LOG_SFXHUB, "Failed to create gun FX controller");
         } else {
             // Set rates of fire
             RateOfFire *rates = (RateOfFire*)malloc(config->gun.rate_count * sizeof(RateOfFire));
             if (rates == nullptr) {
-                LOG_ERROR(LOG_HELIFX, "Failed to allocate rates array");
+                LOG_ERROR(LOG_SFXHUB, "Failed to allocate rates array");
                 gun_fx_destroy(gun);
                 gun = nullptr;
             } else {
@@ -184,16 +184,16 @@ int main(int argc, char *argv[]) {
                 }
                 
                 if (gun_fx_set_rates_of_fire(gun, rates, config->gun.rate_count) != 0) {
-                    LOG_ERROR(LOG_HELIFX, "Failed to set rates of fire");
+                    LOG_ERROR(LOG_SFXHUB, "Failed to set rates of fire");
                 }
                 
                 free(rates);
                 
-                LOG_INFO(LOG_HELIFX, "Gun FX initialized with %d rates", config->gun.rate_count);
+                LOG_INFO(LOG_SFXHUB, "Gun FX initialized with %d rates", config->gun.rate_count);
             }
         }
     } else {
-        LOG_INFO(LOG_HELIFX, "Gun FX not configured; skipping initialization");
+        LOG_INFO(LOG_SFXHUB, "Gun FX not configured; skipping initialization");
     }
     
     // Create status display if in interactive mode
@@ -201,13 +201,13 @@ int main(int argc, char *argv[]) {
     if (interactive_mode) {
         status = status_display_create(gun, engine, 100);  // 100ms refresh
         if (!status) {
-            LOG_WARN(LOG_HELIFX, "Failed to create status display");
+            LOG_WARN(LOG_SFXHUB, "Failed to create status display");
         }
     }
     
-    LOG_INFO(LOG_HELIFX, "System ready. Press Ctrl+C to exit.");
+    LOG_INFO(LOG_SFXHUB, "System ready. Press Ctrl+C to exit.");
     if (!interactive_mode) {
-        printf("\n[HELIFX] System ready. Press Ctrl+C to exit.\n\n");
+        printf("\n[SFXHUB] System ready. Press Ctrl+C to exit.\n\n");
     }
     
     // Main loop
@@ -216,24 +216,24 @@ int main(int argc, char *argv[]) {
     }
     
     // Cleanup
-    LOG_INFO(LOG_HELIFX, "Cleaning up...");
+    LOG_INFO(LOG_SFXHUB, "Cleaning up...");
     if (!interactive_mode) {
-        printf("[HELIFX] Cleaning up...\n");
+        printf("[SFXHUB] Cleaning up...\n");
     }
     
     // Stop all threads first
     if (status) {
         status_display_destroy(status);
-        LOG_INFO(LOG_HELIFX, "Status display stopped");
+        LOG_INFO(LOG_SFXHUB, "Status display stopped");
     }
     
     if (engine) {
         engine_fx_destroy(engine);
-        LOG_INFO(LOG_HELIFX, "Engine FX thread stopped");
+        LOG_INFO(LOG_SFXHUB, "Engine FX thread stopped");
     }
     if (gun) {
         gun_fx_destroy(gun);
-        LOG_INFO(LOG_HELIFX, "Gun FX thread stopped");
+        LOG_INFO(LOG_SFXHUB, "Gun FX thread stopped");
     }
     
     // Cleanup resources
@@ -242,9 +242,9 @@ int main(int argc, char *argv[]) {
     audio_mixer_destroy(mixer);
     gpio_cleanup();
     
-    LOG_INFO(LOG_HELIFX, "Shutdown complete");
+    LOG_INFO(LOG_SFXHUB, "Shutdown complete");
     logging_shutdown();
     
-    printf("[HELIFX] Shutdown complete.\n");
+    printf("[SFXHUB] Shutdown complete.\n");
     return 0;
 }

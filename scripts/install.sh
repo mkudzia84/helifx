@@ -1,11 +1,11 @@
 #!/bin/bash
 #
-# Installation script for Helicopter FX system
+# Installation script for ScaleFX Hub system
 # Run with sudo: sudo ./install.sh [user] [config_path]
 #
 # Arguments:
 #   user         - Username to install for (default: pi)
-#   config_path  - Path to config.yaml (default: /home/user/helifx/config.yaml)
+#   config_path  - Path to config.yaml (default: /home/user/scalefx/config.yaml)
 #
 
 set -e
@@ -18,12 +18,12 @@ NC='\033[0m' # No Color
 
 # Parse command-line arguments
 USER="${1:-pi}"
-INSTALL_DIR="/home/$USER/helifx"
+INSTALL_DIR="/home/$USER/scalefx"
 CONFIG_PATH="${2:-$INSTALL_DIR/config.yaml}"
-SERVICE_NAME="helifx.service"
+SERVICE_NAME="sfxhub.service"
 
 echo -e "${GREEN}======================================${NC}"
-echo -e "${GREEN}Helicopter FX Installation Script${NC}"
+echo -e "${GREEN}ScaleFX Hub Installation Script${NC}"
 echo -e "${GREEN}======================================${NC}"
 echo -e "${YELLOW}Installing for user:${NC} $USER"
 echo -e "${YELLOW}Installation directory:${NC} $INSTALL_DIR"
@@ -64,7 +64,7 @@ echo -e "${GREEN}Using libgpiod for GPIO control (no daemon required)${NC}"
 echo ""
 
 # Build the application
-echo -e "${YELLOW}Building helifx...${NC}"
+echo -e "${YELLOW}Building sfxhub...${NC}"
 make clean
 make
 echo -e "${GREEN}Build complete${NC}"
@@ -77,8 +77,8 @@ mkdir -p "$INSTALL_DIR/assets"
 
 # Copy files
 echo -e "${YELLOW}Installing application files...${NC}"
-cp ./build/helifx "$INSTALL_DIR/"
-chmod +x "$INSTALL_DIR/helifx"
+cp ./build/sfxhub "$INSTALL_DIR/"
+chmod +x "$INSTALL_DIR/sfxhub"
 
 # Copy config (don't overwrite existing)
 if [ ! -f "$INSTALL_DIR/config.yaml" ]; then
@@ -106,31 +106,31 @@ if [ ! -f "./scripts/setup-audio-levels.sh" ]; then
     exit 1
 fi
 
-cp ./scripts/setup-audio-levels.sh /usr/local/bin/helifx-audio-setup
-chmod +x /usr/local/bin/helifx-audio-setup
-echo -e "${GREEN}  ✓ Audio setup script installed to /usr/local/bin/helifx-audio-setup${NC}"
+cp ./scripts/setup-audio-levels.sh /usr/local/bin/sfxhub-audio-setup
+chmod +x /usr/local/bin/sfxhub-audio-setup
+echo -e "${GREEN}  ✓ Audio setup script installed to /usr/local/bin/sfxhub-audio-setup${NC}"
 
 echo ""
 echo -e "${YELLOW}Installing audio systemd service...${NC}"
-if [ ! -f "./scripts/helifx-audio.service" ]; then
-    echo -e "${RED}Error: helifx-audio.service not found${NC}"
+if [ ! -f "./scripts/sfxhub-audio.service" ]; then
+    echo -e "${RED}Error: sfxhub-audio.service not found${NC}"
     exit 1
 fi
 
-cp ./scripts/helifx-audio.service /etc/systemd/system/
-echo -e "${GREEN}  ✓ Audio service installed to /etc/systemd/system/helifx-audio.service${NC}"
+cp ./scripts/sfxhub-audio.service /etc/systemd/system/
+echo -e "${GREEN}  ✓ Audio service installed to /etc/systemd/system/sfxhub-audio.service${NC}"
 
 echo ""
 echo -e "${YELLOW}Configure audio service auto-start?${NC}"
 echo "  This service sets audio levels at boot time"
-read -p "Enable helifx-audio.service on boot? (y/n): " -n 1 -r
+read -p "Enable sfxhub-audio.service on boot? (y/n): " -n 1 -r
 echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
-    systemctl enable helifx-audio.service
-    echo -e "${GREEN}  ✓ helifx-audio.service enabled (will run at boot)${NC}"
+    systemctl enable sfxhub-audio.service
+    echo -e "${GREEN}  ✓ sfxhub-audio.service enabled (will run at boot)${NC}"
 else
-    systemctl disable helifx-audio.service 2>/dev/null || true
-    echo -e "${YELLOW}  ⚠ helifx-audio.service disabled (manual setup required)${NC}"
+    systemctl disable sfxhub-audio.service 2>/dev/null || true
+    echo -e "${YELLOW}  ⚠ sfxhub-audio.service disabled (manual setup required)${NC}"
 fi
 
 echo ""
@@ -138,20 +138,20 @@ echo -e "${YELLOW}Run audio setup now?${NC}"
 read -p "Configure audio levels now? (y/n): " -n 1 -r
 echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
-    /usr/local/bin/helifx-audio-setup --verbose || echo -e "${YELLOW}  ⚠ Audio setup completed with warnings${NC}"
+    /usr/local/bin/sfxhub-audio-setup --verbose || echo -e "${YELLOW}  ⚠ Audio setup completed with warnings${NC}"
 else
-    echo -e "${YELLOW}  ⚠ Skipped. Run manually: sudo helifx-audio-setup --verbose${NC}"
+    echo -e "${YELLOW}  ⚠ Skipped. Run manually: sudo sfxhub-audio-setup --verbose${NC}"
 fi
 
 # ============================================================================
-# HELIFX SERVICE INSTALLATION
+# SFXHUB SERVICE INSTALLATION
 # ============================================================================
 echo ""
-echo -e "${GREEN}[Step 2/2] HeliFX Service Installation${NC}"
-echo -e "${YELLOW}Installing helifx systemd service...${NC}"
+echo -e "${GREEN}[Step 2/2] ScaleFX Hub Service Installation${NC}"
+echo -e "${YELLOW}Installing sfxhub systemd service...${NC}"
 
-if [ ! -f "./scripts/helifx.service" ]; then
-    echo -e "${RED}Error: helifx.service template not found${NC}"
+if [ ! -f "./scripts/sfxhub.service" ]; then
+    echo -e "${RED}Error: sfxhub.service template not found${NC}"
     exit 1
 fi
 
@@ -171,14 +171,14 @@ sed -e "s|{{USER}}|$USER|g" \
     -e "s|{{USER_UID}}|$USER_UID|g" \
     -e "s|{{INSTALL_DIR}}|$INSTALL_DIR|g" \
     -e "s|{{CONFIG_PATH}}|$CONFIG_PATH|g" \
-    "./scripts/helifx.service" > /etc/systemd/system/$SERVICE_NAME
+    "./scripts/sfxhub.service" > /etc/systemd/system/$SERVICE_NAME
 
 systemctl daemon-reload
-echo -e "${GREEN}  ✓ helifx.service installed to /etc/systemd/system/$SERVICE_NAME${NC}"
+echo -e "${GREEN}  ✓ sfxhub.service installed to /etc/systemd/system/$SERVICE_NAME${NC}"
 
 echo ""
-echo -e "${YELLOW}Configure helifx service auto-start?${NC}"
-echo "  This starts the helicopter FX system at boot"
+echo -e "${YELLOW}Configure sfxhub service auto-start?${NC}"
+echo "  This starts the ScaleFX Hub system at boot"
 read -p "Enable $SERVICE_NAME on boot? (y/n): " -n 1 -r
 echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
@@ -190,7 +190,7 @@ else
 fi
 
 echo ""
-echo -e "${YELLOW}Start helifx service now?${NC}"
+echo -e "${YELLOW}Start sfxhub service now?${NC}"
 read -p "Start $SERVICE_NAME? (y/n): " -n 1 -r
 echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
@@ -217,28 +217,28 @@ echo -e "${YELLOW}Installation Summary:${NC}"
 echo "  User:             $USER"
 echo "  Install Dir:      $INSTALL_DIR"
 echo "  Config File:      $CONFIG_PATH"
-echo "  Executable:       $INSTALL_DIR/helifx"
+echo "  Executable:       $INSTALL_DIR/sfxhub"
 echo ""
 
 # Show service status
-AUDIO_ENABLED=$(systemctl is-enabled helifx-audio.service 2>/dev/null || echo "disabled")
-HELIFX_ENABLED=$(systemctl is-enabled $SERVICE_NAME 2>/dev/null || echo "disabled")
-HELIFX_ACTIVE=$(systemctl is-active $SERVICE_NAME 2>/dev/null || echo "inactive")
+AUDIO_ENABLED=$(systemctl is-enabled sfxhub-audio.service 2>/dev/null || echo "disabled")
+SFXHUB_ENABLED=$(systemctl is-enabled $SERVICE_NAME 2>/dev/null || echo "disabled")
+SFXHUB_ACTIVE=$(systemctl is-active $SERVICE_NAME 2>/dev/null || echo "inactive")
 
 echo -e "${YELLOW}Service Status:${NC}"
-echo "  helifx-audio.service:  $AUDIO_ENABLED"
-echo "  $SERVICE_NAME:     $HELIFX_ENABLED ($HELIFX_ACTIVE)"
+echo "  sfxhub-audio.service:  $AUDIO_ENABLED"
+echo "  $SERVICE_NAME:     $SFXHUB_ENABLED ($SFXHUB_ACTIVE)"
 echo ""
 
 echo -e "${YELLOW}Useful Commands:${NC}"
 echo ""
 echo -e "${GREEN}Audio Setup:${NC}"
-echo "  sudo helifx-audio-setup --verbose    # Configure audio levels"
-echo "  sudo systemctl start helifx-audio    # Run audio setup service"
-echo "  sudo systemctl enable helifx-audio   # Enable audio setup at boot"
-echo "  sudo systemctl disable helifx-audio  # Disable audio setup at boot"
+echo "  sudo sfxhub-audio-setup --verbose      # Configure audio levels"
+echo "  sudo systemctl start sfxhub-audio      # Run audio setup service"
+echo "  sudo systemctl enable sfxhub-audio     # Enable audio setup at boot"
+echo "  sudo systemctl disable sfxhub-audio    # Disable audio setup at boot"
 echo ""
-echo -e "${GREEN}HeliFX Service:${NC}"
+echo -e "${GREEN}ScaleFX Hub Service:${NC}"
 echo "  sudo systemctl start $SERVICE_NAME      # Start the service"
 echo "  sudo systemctl stop $SERVICE_NAME       # Stop the service"
 echo "  sudo systemctl restart $SERVICE_NAME    # Restart the service"

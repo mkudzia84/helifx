@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Uninstallation script for Helicopter FX system
+# Uninstallation script for ScaleFX Hub system
 # Run with sudo: sudo ./uninstall.sh [user]
 #
 # Arguments:
@@ -17,11 +17,11 @@ NC='\033[0m' # No Color
 
 # Parse command-line arguments
 USER="${1:-pi}"
-INSTALL_DIR="/home/$USER/helifx"
-SERVICE_NAME="helifx.service"
+INSTALL_DIR="/home/$USER/scalefx"
+SERVICE_NAME="sfxhub.service"
 
 echo -e "${RED}======================================${NC}"
-echo -e "${RED}Helicopter FX Uninstallation Script${NC}"
+echo -e "${RED}ScaleFX Hub Uninstallation Script${NC}"
 echo -e "${RED}======================================${NC}"
 echo -e "${YELLOW}Uninstalling for user:${NC} $USER"
 echo -e "${YELLOW}Installation directory:${NC} $INSTALL_DIR"
@@ -33,7 +33,7 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
-echo -e "${YELLOW}Warning: This will remove the Helicopter FX system${NC}"
+echo -e "${YELLOW}Warning: This will remove the ScaleFX Hub system${NC}"
 read -p "Are you sure you want to continue? (y/n): " -n 1 -r
 echo
 if [[ ! $REPLY =~ ^[Yy]$ ]]; then

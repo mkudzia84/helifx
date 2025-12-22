@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# HeliFX Audio HAT Setup Script
+# ScaleFX Audio HAT Setup Script
 # Interactive menu to install and configure audio HAT drivers
 #
 # Usage: sudo ./setup-audio-hat.sh
@@ -25,7 +25,7 @@ fi
 show_menu() {
     clear
     echo -e "${GREEN}=====================================${NC}"
-    echo -e "${GREEN}  HeliFX Audio HAT Setup${NC}"
+    echo -e "${GREEN}  ScaleFX Audio HAT Setup${NC}"
     echo -e "${GREEN}=====================================${NC}"
     echo ""
     echo -e "${BLUE}Select your audio HAT:${NC}"
@@ -152,8 +152,8 @@ while true; do
             ;;
         5)
             echo ""
-            if [ -f "/usr/local/bin/helifx-audio-setup" ]; then
-                /usr/local/bin/helifx-audio-setup --verbose
+            if [ -f "/usr/local/bin/sfxhub-audio-setup" ]; then
+                /usr/local/bin/sfxhub-audio-setup --verbose
             elif [ -f "./setup-audio-levels.sh" ]; then
                 ./setup-audio-levels.sh --verbose
             else

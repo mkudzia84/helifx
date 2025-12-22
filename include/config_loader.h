@@ -77,37 +77,37 @@ typedef struct GunFXConfig {
     int rate_count;
 } GunFXConfig;
 
-// Complete helicopter FX configuration
-typedef struct HeliFXConfig {
+// Complete ScaleFX configuration
+typedef struct ScaleFXConfig {
     EngineFXConfig engine;
     GunFXConfig gun;
-} HeliFXConfig;
+} ScaleFXConfig;
 
 /**
  * Load and parse YAML configuration file using libcyaml
  * @param config_file Path to YAML configuration file
  * @return Pointer to loaded configuration, or nullptr on error
  */
-HeliFXConfig* config_load(const char *config_file);
+ScaleFXConfig* config_load(const char *config_file);
 
 /**
  * Validate configuration
  * @param config Configuration to validate
  * @return 0 if valid, -1 if invalid
  */
-int config_validate(const HeliFXConfig *config);
+int config_validate(const ScaleFXConfig *config);
 
 /**
  * Print configuration to stdout
  * @param config Configuration to display
  */
-void config_print(const HeliFXConfig *config);
+void config_print(const ScaleFXConfig *config);
 
 /**
  * Free configuration memory (uses cyaml_free)
  * @param config Configuration to free
  */
-void config_free(HeliFXConfig *config);
+void config_free(ScaleFXConfig *config);
 
 /**
  * Save configuration to YAML file
@@ -115,6 +115,6 @@ void config_free(HeliFXConfig *config);
  * @param config Configuration to save
  * @return 0 on success, -1 on error
  */
-int config_save(const char *config_file, const HeliFXConfig *config);
+int config_save(const char *config_file, const ScaleFXConfig *config);
 
 #endif // CONFIG_LOADER_H

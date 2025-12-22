@@ -27,37 +27,20 @@ BUILD_DIR = build
 SCRIPTS_DIR = scripts
 
 # Output binaries
-HELIFX = $(BUILD_DIR)/helifx
+SFXHUB = $(BUILD_DIR)/sfxhub
 
 # All targets
-TARGETS = $(HELIFX)
+TARGETS = $(SFXHUB)
 
 # Source files
-HELIFX_SRCS = $(SRC_DIR)/main.c $(SRC_DIR)/config_loader.c \
+SFXHUB_SRCS = $(SRC_DIR)/main.c $(SRC_DIR)/config_loader.c \
               $(SRC_DIR)/engine_fx.c $(SRC_DIR)/gun_fx.c \
               $(SRC_DIR)/smoke_generator.c \
               $(SRC_DIR)/audio_player.c $(SRC_DIR)/gpio.c $(SRC_DIR)/serial_bus.c \
               $(SRC_DIR)/status.c $(SRC_DIR)/logging.c
 
-MIXER_DEMO_SRCS = $(DEMO_DIR)/mixer_demo.c $(SRC_DIR)/audio_player.c $(SRC_DIR)/gpio.c
-ENGINE_FX_DEMO_SRCS = $(DEMO_DIR)/engine_fx_demo.c $(SRC_DIR)/engine_fx.c \
-                      $(SRC_DIR)/audio_player.c $(SRC_DIR)/gpio.c
-GUN_FX_DEMO_SRCS = $(DEMO_DIR)/gun_fx_demo.c $(SRC_DIR)/gun_fx.c \
-                   $(SRC_DIR)/lights.c $(SRC_DIR)/smoke_generator.c \
-                   $(SRC_DIR)/audio_player.c $(SRC_DIR)/gpio.c $(SRC_DIR)/servo.c
-SERVO_DEMO_SRCS = $(DEMO_DIR)/servo_demo.c $(SRC_DIR)/servo.c
-JETIEX_DEMO_SRCS = $(DEMO_DIR)/jetiex_demo.c $(SRC_DIR)/jetiex.c
-
 # Object files
-HELIFX_OBJS = $(HELIFX_SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o)
-MIXER_DEMO_OBJS = $(BUILD_DIR)/demo/mixer_demo.o $(BUILD_DIR)/audio_player.o $(BUILD_DIR)/gpio.o
-ENGINE_FX_DEMO_OBJS = $(BUILD_DIR)/demo/engine_fx_demo.o $(BUILD_DIR)/engine_fx.o \
-                      $(BUILD_DIR)/audio_player.o $(BUILD_DIR)/gpio.o
-GUN_FX_DEMO_OBJS = $(BUILD_DIR)/demo/gun_fx_demo.o $(BUILD_DIR)/gun_fx.o \
-                   $(BUILD_DIR)/lights.o $(BUILD_DIR)/smoke_generator.o \
-                   $(BUILD_DIR)/audio_player.o $(BUILD_DIR)/gpio.o $(BUILD_DIR)/servo.o
-SERVO_DEMO_OBJS = $(BUILD_DIR)/demo/servo_demo.o $(BUILD_DIR)/servo.o
-JETIEX_DEMO_OBJS = $(BUILD_DIR)/demo/jetiex_demo.o $(BUILD_DIR)/jetiex.o
+SFXHUB_OBJS = $(SFXHUB_SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o)
 
 # Default target
 .PHONY: all
@@ -73,8 +56,8 @@ $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
 # Main application
-$(HELIFX): $(BUILD_DIR) $(HELIFX_OBJS)
-	$(CC) $(CFLAGS) -o $@ $(HELIFX_OBJS) $(LIBS)
+$(SFXHUB): $(BUILD_DIR) $(SFXHUB_OBJS)
+	$(CC) $(CFLAGS) -o $@ $(SFXHUB_OBJS) $(LIBS)
 
 # Compile source files
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
@@ -111,29 +94,29 @@ clean:
 # Install targets
 .PHONY: install
 install: all
-	@echo "Installing helifx to /usr/local/bin/"
-	sudo install -m 755 $(HELIFX) /usr/local/bin/
+	@echo "Installing sfxhub to /usr/local/bin/"
+	sudo install -m 755 $(SFXHUB) /usr/local/bin/
 	@echo "Installation complete"
 
 # Install systemd service
 .PHONY: install-service
 install-service:
 	@echo "Installing systemd service..."
-	sudo install -m 644 $(SCRIPTS_DIR)/helifx.service /etc/systemd/system/
+	sudo install -m 644 $(SCRIPTS_DIR)/sfxhub.service /etc/systemd/system/
 	sudo systemctl daemon-reload
-	@echo "Service installed. Enable with: sudo systemctl enable helifx"
+	@echo "Service installed. Enable with: sudo systemctl enable sfxhub"
 
 # Uninstall
 .PHONY: uninstall
 uninstall:
-	@echo "Removing helifx binaries..."
-	sudo rm -f /usr/local/bin/helifx
+	@echo "Removing sfxhub binaries..."
+	sudo rm -f /usr/local/bin/sfxhub
 	@echo "Uninstallation complete"
 
 # Help target
 .PHONY: help
 help:
-	@echo "Helicopter FX Build System"
+	@echo "ScaleFX Build System"
 	@echo ""
 	@echo "Prerequisites:"
 	@echo "  - GCC 14+ (C23 support required)"
@@ -149,7 +132,7 @@ help:
 	@echo "  Then log out and back in for group membership to take effect"
 	@echo ""
 	@echo "Targets:"
-	@echo "  all              - Build helifx (default)"
+	@echo "  all              - Build sfxhub (default)"
 	@echo "  debug            - Build with debug logging enabled (-DDEBUG)"
 	@echo "  clean            - Remove build artifacts"
 	@echo "  install          - Install binary to /usr/local/bin"
@@ -158,7 +141,7 @@ help:
 	@echo "  help             - Show this help message"
 	@echo ""
 	@echo "Examples:"
-	@echo "  make             - Build helifx"
+	@echo "  make             - Build sfxhub"
 	@echo "  make debug       - Debug build (with LOG_DEBUG output)"
 	@echo "  make clean all   - Clean rebuild"
 	@echo "  sudo make install - Install to system"

@@ -7,7 +7,7 @@ build/
 *.exe
 
 # Binaries
-helifx
+sfxhub
 mixer_demo
 gpio_demo
 engine_fx_demo

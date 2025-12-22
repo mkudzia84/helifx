@@ -19,12 +19,25 @@
 // 0x10 SRV_SET       payload servo_id:u8, pulse_us:u16le
 // 0x11 SRV_SETTINGS  payload servo_id:u8, min:u16le, max:u16le, max_speed:u16le, accel:u16le, decel:u16le
 // 0x20 SMOKE_HEAT    payload on:u8 (0/1)
+// 0xF0 INIT          payload none (daemon initialization - reset to safe state)
+// 0xF1 SHUTDOWN      payload none (daemon shutdown - enter safe state)
+// 0xF2 KEEPALIVE     payload none (periodic keepalive from daemon)
+// Telemetry (Pico -> PC):
+// 0xF3 INIT_READY    payload module_name:string (sent in response to INIT)
+// 0xF4 STATUS        payload flags:u8, fan_off_remaining_ms:u16le, servo_us[3]:u16le each, rate_of_fire_rpm:u16le
 
 static const uint8_t PKT_TRIGGER_ON   = 0x01;
 static const uint8_t PKT_TRIGGER_OFF  = 0x02;
 static const uint8_t PKT_SRV_SET      = 0x10;
 static const uint8_t PKT_SRV_SETTINGS = 0x11;
 static const uint8_t PKT_SMOKE_HEAT   = 0x20;
+
+// Universal protocol packets (high values, used across all modules)
+static const uint8_t PKT_INIT         = 0xF0;
+static const uint8_t PKT_SHUTDOWN     = 0xF1;
+static const uint8_t PKT_KEEPALIVE    = 0xF2;
+static const uint8_t PKT_INIT_READY   = 0xF3;
+static const uint8_t PKT_STATUS       = 0xF4;
 
 
 struct GunFX {
@@ -65,12 +78,33 @@ struct GunFX {
     atomic_int current_rate_index;  // Currently active rate (-1 = not firing)
     atomic_bool smoke_heater_on;
     
+    // Protocol timing
+    struct timespec last_keepalive_time;
+    
     // Processing thread
     thrd_t processing_thread;
     atomic_bool processing_running;
 };
 
 // ---------------------- Protocol helpers ----------------------
+
+static void send_init(GunFX *gun) {
+    if (!gun || !gun->serial_bus) return;
+    serial_bus_send_packet(gun->serial_bus, PKT_INIT, NULL, 0);
+    LOG_DEBUG(LOG_GUN, "Sent INIT to Pico");
+}
+
+static void send_shutdown(GunFX *gun) {
+    if (!gun || !gun->serial_bus) return;
+    serial_bus_send_packet(gun->serial_bus, PKT_SHUTDOWN, NULL, 0);
+    LOG_DEBUG(LOG_GUN, "Sent SHUTDOWN to Pico");
+}
+
+static void send_keepalive(GunFX *gun) {
+    if (!gun || !gun->serial_bus) return;
+    serial_bus_send_packet(gun->serial_bus, PKT_KEEPALIVE, NULL, 0);
+    clock_gettime(CLOCK_MONOTONIC, &gun->last_keepalive_time);
+}
 
 // Select rate of fire from PWM reading with hysteresis
 // Returns -1 if not firing, or index of active rate (0 to rate_count-1)
@@ -361,7 +395,19 @@ static int gun_fx_processing_thread(void *arg) {
     struct timespec last_pwm_debug_time;
     clock_gettime(CLOCK_MONOTONIC, &last_pwm_debug_time);
     
+    // Send keepalive every 30 seconds (Pico watchdog timeout is 90s)
+    const long KEEPALIVE_INTERVAL_MS = 30000;
+    
     while (atomic_load(&gun->processing_running)) {
+        // Send periodic keepalive to Pico
+        struct timespec now;
+        clock_gettime(CLOCK_MONOTONIC, &now);
+        long elapsed_ms = (now.tv_sec - gun->last_keepalive_time.tv_sec) * 1000 + 
+                         (now.tv_nsec - gun->last_keepalive_time.tv_nsec) / 1000000;
+        if (elapsed_ms >= KEEPALIVE_INTERVAL_MS) {
+            send_keepalive(gun);
+        }
+        
         // Update servos
         update_servos(gun);
         
@@ -442,6 +488,13 @@ GunFX* gun_fx_create(AudioMixer *mixer, int audio_channel,
     gun->serial_bus_config = pico_config;
     
     LOG_DEBUG(LOG_GUN, "gunfx_pico opened on %s", gun->serial_bus_config.device_path);
+    
+    // Initialize keepalive timer and send INIT
+    clock_gettime(CLOCK_MONOTONIC, &gun->last_keepalive_time);
+    send_init(gun);
+    
+    // Small delay to allow Pico to respond with INIT_READY
+    usleep(100000); // 100ms
 
     // Create trigger PWM monitor if pin specified
     if (config->trigger.pin >= 0) {
@@ -535,6 +588,8 @@ void gun_fx_destroy(GunFX *gun) {
     }
 
     if (gun->serial_bus) {
+        send_shutdown(gun);
+        usleep(50000); // 50ms delay to allow Pico to process shutdown
         serial_bus_close(gun->serial_bus);
     }
     

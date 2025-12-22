@@ -1,6 +1,6 @@
 # Audio HAT Compatibility Guide
 
-Complete reference for audio HATs supported by HeliFX system.
+Complete reference for audio HATs supported by ScaleFX Hub system.
 
 ## Table of Contents
 - [Supported Audio HATs](#supported-audio-hats)
@@ -12,7 +12,7 @@ Complete reference for audio HATs supported by HeliFX system.
 
 ## Supported Audio HATs
 
-HeliFX is compatible with the following Raspberry Pi audio HATs:
+ScaleFX Hub is compatible with the following Raspberry Pi audio HATs:
 
 ### 1. WM8960 Audio HAT
 - **Manufacturer:** Waveshare / Generic
@@ -61,7 +61,7 @@ Both audio HATs use overlapping GPIO pins for audio communication. The software 
 
 ## Pin Protection Mechanism
 
-The HeliFX software includes automatic protection for audio HAT pins:
+The ScaleFX Hub software includes automatic protection for audio HAT pins:
 
 ### Software Protection
 
@@ -207,7 +207,7 @@ static bool is_audio_hat_pin(int pin) {
    speaker-test -c 2 -t wav -l 1
    ```
 
-### HeliFX Configuration
+### ScaleFX Hub Configuration
 
 No special configuration needed! The software automatically:
 - Detects and protects audio HAT pins
@@ -252,8 +252,8 @@ To switch from one audio HAT to another:
    # Test audio output
    speaker-test -c 2 -t wav -l 1
    
-   # Run HeliFX
-   sudo ./helifx config.yaml
+   # Run ScaleFX Hub
+   sudo ./sfxhub config.yaml
    ```
 
 ## Troubleshooting
@@ -302,12 +302,12 @@ If you see errors like:
 
 - **WM8960 Datasheet:** [Cirrus Logic WM8960](https://www.cirrus.com/products/wm8960/)
 - **DigiAMP+ Documentation:** [Raspberry Pi Official](https://www.raspberrypi.com/products/iqaudio-digiamp/)
-- **HeliFX Wiring Guide:** [WIRING.md](WIRING.md)
+- **ScaleFX Hub Wiring Guide:** [WIRING.md](WIRING.md)
 - **Raspberry Pi Pinout:** [pinout.xyz](https://pinout.xyz/)
 
 ## Summary
 
-Both WM8960 Audio HAT and Raspberry Pi DigiAMP+ are fully supported by HeliFX:
+Both WM8960 Audio HAT and Raspberry Pi DigiAMP+ are fully supported by ScaleFX Hub:
 
 | Feature | WM8960 | DigiAMP+ |
 |---------|--------|----------|

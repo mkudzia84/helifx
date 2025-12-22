@@ -219,7 +219,7 @@ static void display_status(StatusDisplay *status) {
     // Clear screen and print header
     printf("\033[2J\033[H");  // Clear screen and move cursor to top
     printf(COLOR_CYAN COLOR_BOLD "════════════════════════════════════════════════════════════════════════════\n");
-    printf("                         HELIFX SYSTEM STATUS @ %.1fs\n", elapsed);
+    printf("                         SCALEFX SYSTEM STATUS @ %.1fs\n", elapsed);
     printf("════════════════════════════════════════════════════════════════════════════\n" COLOR_RESET);
     printf("\n");
     

@@ -151,7 +151,7 @@ int gpio_set_mode(int pin, GPIOMode mode) {
         LOG_ERROR(LOG_GPIO, "Failed to create request config");
         return -1;
     }
-    gpiod_request_config_set_consumer(req_cfg, "helifx");
+    gpiod_request_config_set_consumer(req_cfg, "sfxhub");
     
     // Create line config
     struct gpiod_line_config *line_cfg = gpiod_line_config_new();
@@ -491,7 +491,7 @@ PWMMonitor* pwm_monitor_create_with_name(int pin, const char *feature_name, PWMC
         free(monitor);
         return nullptr;
     }
-    gpiod_request_config_set_consumer(req_cfg, "helifx-pwm");
+    gpiod_request_config_set_consumer(req_cfg, "sfxhub-pwm");
     
     // Create line config
     struct gpiod_line_config *line_cfg = gpiod_line_config_new();

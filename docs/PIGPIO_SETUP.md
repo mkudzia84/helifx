@@ -2,7 +2,7 @@
 
 ## Overview
 
-The helifx application uses the **pigpiod daemon** for GPIO control. The daemon must be configured to exclude WM8960 Audio HAT pins (GPIO 2,3,18-21) to allow the kernel I2C and I2S drivers to use those pins for audio.
+The sfxhub application uses the **pigpiod daemon** for GPIO control. The daemon must be configured to exclude WM8960 Audio HAT pins (GPIO 2,3,18-21) to allow the kernel I2C and I2S drivers to use those pins for audio.
 
 **Important:** The installation script automatically handles this configuration.
 
@@ -30,18 +30,18 @@ The `install.sh` script automatically:
 
 No manual configuration is needed.
 
-## Running helifx
+## Running sfxhub
 
 Once pigpiod is running with the correct configuration:
 
 **Direct execution:**
 ```bash
-sudo ./build/helifx config.yaml
+sudo ./build/sfxhub config.yaml
 ```
 
 **Using systemd service (recommended for production):**
 ```bash
-sudo systemctl start helifx
+sudo systemctl start sfxhub
 ```
 
 **Verify pigpiod is running:**
@@ -50,14 +50,14 @@ sudo systemctl status pigpiod
 ```
 
 ```bash
-# Start the helifx service
-sudo systemctl start helifx
+# Start the sfxhub service
+sudo systemctl start sfxhub
 
 # Enable auto-start on boot
-sudo systemctl enable helifx
+sudo systemctl enable sfxhub
 
 # Check status
-sudo systemctl status helifx
+sudo systemctl status sfxhub
 ```
 
 ## Troubleshooting
@@ -114,14 +114,14 @@ pigs m 19 w  # Should fail - GPIO 19 is I2S LRCK (excluded)
 pigs m 5 w   # Should succeed - GPIO 5 is Engine Toggle
 pigs m 6 w   # Should succeed - GPIO 6 is Gun Trigger
 
-# Check helifx can connect
-sudo ./build/helifx config.yaml
+# Check sfxhub can connect
+sudo ./build/sfxhub config.yaml
 # Should show: "Connected to pigpiod daemon"
 ```
 
 ## Available GPIO Pins
 
-After excluding WM8960 pins, these GPIO pins are available for helifx:
+After excluding WM8960 pins, these GPIO pins are available for sfxhub:
 
 ### Input Pins (PWM monitoring)
 - GPIO 5 - Engine toggle
@@ -145,7 +145,7 @@ After excluding WM8960 pins, these GPIO pins are available for helifx:
 ## Troubleshooting
 
 ### "Can't lock /var/run/pigpio.pid" error
-**Symptom:** helifx fails to start with this error
+**Symptom:** sfxhub fails to start with this error
 **Cause:** The pigpiod daemon is running
 **Solution:** 
 ```bash
@@ -156,17 +156,17 @@ sudo systemctl disable pigpiod
 ### pigpio conflicts with audio
 **Symptom:** Audio playback is distorted or fails
 **Cause:** WM8960 pins not properly excluded
-**Solution:** The exclusion is automatic in helifx code. Make sure you're not manually controlling GPIO 2,3,18-21
+**Solution:** The exclusion is automatic in sfxhub code. Make sure you're not manually controlling GPIO 2,3,18-21
 
 ### Permission denied errors
-**Symptom:** helifx cannot initialize GPIO
+**Symptom:** sfxhub cannot initialize GPIO
 **Solution:** 
 ```bash
 # Run with sudo
-sudo ./build/helifx config.yaml
+sudo ./build/sfxhub config.yaml
 
 # Or use the systemd service
-sudo systemctl start helifx
+sudo systemctl start sfxhub
 ```
 
 ### Check for daemon conflicts

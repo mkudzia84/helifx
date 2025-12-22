@@ -41,7 +41,7 @@ void logging_write(const char *level, const char *component, const char *fmt, ..
 #define LOG_COLOR_RESET   "\033[0m"
 
 /* Component prefixes */
-#define LOG_HELIFX   "[HELIFX] "
+#define LOG_SFXHUB   "[SFXHUB] "
 #define LOG_CONFIG   "[CONFIG] "
 #define LOG_ENGINE   "[ENGINE] "
 #define LOG_GUN      "[GUN]    "
@@ -50,8 +50,6 @@ void logging_write(const char *level, const char *component, const char *fmt, ..
 #define LOG_SMOKE    "[SMOKE]  "
 #define LOG_GPIO     "[GPIO]   "
 #define LOG_LIGHTS   "[LIGHTS] "
-#define LOG_JETIEX   "[JETIEX] "
-#define LOG_DEMO     "[DEMO]   "
 
 /* System component tag for logging infrastructure itself */
 #define LOG_SYSTEM   "[SYSTEM] "

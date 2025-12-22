@@ -15,8 +15,12 @@
     0x10 SRV_SET       payload: servo_id:u8, pulse_us:u16le
     0x11 SRV_SETTINGS  payload: servo_id:u8, min:u16le, max:u16le, max_speed:u16le, accel:u16le, decel:u16le
     0x20 SMOKE_HEAT    payload: on:u8 (0=off,1=on)
+    0xF0 INIT          payload: none (daemon initialization - reset to safe state)
+    0xF1 SHUTDOWN      payload: none (daemon shutdown - enter safe state)
+    0xF2 KEEPALIVE     payload: none (periodic keepalive from daemon)
   Telemetry (Pico -> Pi):
-    0x80 STATUS        payload: flags:u8 (bit0=firing, bit1=flash_active, bit2=flash_fading, bit3=heater_on, bit4=fan_on, bit5=fan_spindown),
+    0xF3 INIT_READY    payload: module_name:string (sent in response to INIT)
+    0xF4 STATUS        payload: flags:u8 (bit0=firing, bit1=flash_active, bit2=flash_fading, bit3=heater_on, bit4=fan_on, bit5=fan_spindown),
                                   fan_off_remaining_ms:u16le, servo_us[3]:u16le each, rate_of_fire_rpm:u16le
 */
 
@@ -70,8 +74,12 @@ const uint32_t STATUS_INTERVAL_MS = 1000;     // Periodic status interval
   0x10: SRV_SET       payload: servo_id:u8, pulse_us:u16le
   0x11: SRV_SETTINGS  payload: servo_id:u8, min:u16le, max:u16le, max_speed:u16le, accel:u16le, decel:u16le
   0x20: SMOKE_HEAT    payload: on:u8 (0=off,1=on)
+  0xF0: INIT          payload: none (daemon initialization - reset to safe state)
+  0xF1: SHUTDOWN      payload: none (daemon shutdown - enter safe state)
+  0xF2: KEEPALIVE     payload: none (periodic keepalive from daemon)
   Telemetry (Pico -> Pi):
-  0x80: STATUS        payload: flags:u8 (bit0=firing, bit1=flash_active, bit2=flash_fading, bit3=heater_on, bit4=fan_on, bit5=fan_spindown),
+  0xF3: INIT_READY    payload: module_name:string (sent in response to INIT)
+  0xF4: STATUS        payload: flags:u8 (bit0=firing, bit1=flash_active, bit2=flash_fading, bit3=heater_on, bit4=fan_on, bit5=fan_spindown),
 //                               fan_off_remaining_ms:u16le,
 //                               servo_us[3]:u16le each,
 //                               rate_of_fire_rpm:u16le
@@ -81,7 +89,13 @@ const uint8_t PKT_TRIGGER_OFF     = 0x02;
 const uint8_t PKT_SRV_SET         = 0x10;
 const uint8_t PKT_SRV_SETTINGS    = 0x11;
 const uint8_t PKT_SMOKE_HEAT      = 0x20;
-const uint8_t PKT_STATUS          = 0x80;
+
+// Universal protocol packets (high values, used across all modules)
+const uint8_t PKT_INIT            = 0xF0;
+const uint8_t PKT_SHUTDOWN        = 0xF1;
+const uint8_t PKT_KEEPALIVE       = 0xF2;
+const uint8_t PKT_INIT_READY      = 0xF3;
+const uint8_t PKT_STATUS          = 0xF4;
 
 const size_t  MAX_PAYLOAD_SIZE    = 32;
 const size_t  MAX_PACKET_SIZE     = 2 /*type+len*/ + MAX_PAYLOAD_SIZE + 1 /*crc*/;
@@ -145,6 +159,11 @@ ServoMotionState servo_motion[] = {
 };
 
 uint32_t next_status_ms = 0;
+
+// Watchdog state
+const uint32_t WATCHDOG_TIMEOUT_MS = 90000; // 90 seconds
+uint32_t last_keepalive_ms = 0;
+bool watchdog_active = false;
 
 // RX buffer for binary protocol
 uint8_t rx_buffer[COBS_BUFFER_SIZE];
@@ -213,7 +232,69 @@ size_t cobsEncode(const uint8_t *input, size_t length, uint8_t *output) {
   return write_index;
 }
 
-// ---------------------- Helper Functions ----------------------
+// ---------------------- Protocol Packet Helpers ----------------------
+// Modular packet building and sending functions to reduce code duplication
+
+void sendPacket(uint8_t type, const uint8_t* payload_data, size_t payload_len) {
+  uint8_t packet[MAX_PACKET_SIZE];
+  size_t idx = 0;
+  packet[idx++] = type;
+  packet[idx++] = (uint8_t)payload_len;
+  if (payload_len > 0 && payload_data != nullptr) {
+    memcpy(&packet[idx], payload_data, payload_len);
+    idx += payload_len;
+  }
+  packet[idx++] = crc8(packet, idx);
+  
+  uint8_t encoded[COBS_BUFFER_SIZE];
+  size_t enc_len = cobsEncode(packet, idx, encoded);
+  encoded[enc_len++] = 0x00;
+  Serial.write(encoded, enc_len);
+}
+
+void sendInitReady() {
+  const char* module_name = "MSB GunFX";
+  sendPacket(PKT_INIT_READY, (const uint8_t*)module_name, strlen(module_name));
+}
+
+// ---------------------- Watchdog Management ----------------------
+
+void watchdogReset() {
+  last_keepalive_ms = millis();
+  watchdog_active = true;
+}
+
+void watchdogDisable() {
+  watchdog_active = false;
+}
+
+void watchdogCheck(uint32_t now_ms) {
+  if (!watchdog_active) return;
+  
+  if (now_ms - last_keepalive_ms > WATCHDOG_TIMEOUT_MS) {
+    Serial.println("WARN: Watchdog timeout - performing shutdown");
+    performSafeShutdown();
+    watchdogDisable();
+  }
+}
+
+void performSafeShutdown() {
+  stopFiring(0);
+  setSmokeHeater(false);
+  setSmokeFan(false);
+  setNozzleFlash(false);
+}
+
+void performSafeInit() {
+  stopFiring(0);
+  setSmokeHeater(false);
+  // Reset servos to center
+  for (int i = 0; i < 3; i++) {
+    setServoPulse(i + 1, SERVO_DEFAULT_US);
+  }
+}
+
+// ---------------------- Servo Helper Functions ----------------------
 
 ServoConfig* getServoConfig(uint8_t servo_id) {
   if (servo_id == 0 || servo_id > (sizeof(servo_configs) / sizeof(ServoConfig))) {
@@ -251,6 +332,8 @@ float approachZero(float value, float delta) {
   }
   return value;
 }
+
+// ---------------------- Servo Control ----------------------
 
 void setServoPulse(uint8_t servo_id, int pulse_us) {
   ServoConfig* cfg = getServoConfig(servo_id);
@@ -324,6 +407,8 @@ void setServoSettings(uint8_t servo_id, int min_limit, int max_limit, int max_sp
   Serial.print(" decel=");
   Serial.println(cfg->deceleration);
 }
+
+// ---------------------- Hardware Output Control ----------------------
 
 void setNozzleFlash(bool on) {
   if (on) {
@@ -448,6 +533,8 @@ void updateAllServos() {
   }
 }
 
+// ---------------------- Firing Control ----------------------
+
 void startFiring(int rpm) {
   if (rpm <= 0) {
     Serial.println("ERROR: Invalid RPM");
@@ -485,9 +572,7 @@ void stopFiring(uint16_t fan_delay_ms) {
   Serial.println(" ms)");
 }
 
-// ---------------------- Command Processing ----------------------
-
-// ---------------------- Protocol Handling ----------------------
+// ---------------------- Packet Processing ----------------------
 
 void processPacket(const uint8_t *payload, size_t len) {
   if (len < 2) return; // need at least type + len
@@ -536,6 +621,26 @@ void processPacket(const uint8_t *payload, size_t len) {
       setSmokeHeater(body[0] != 0);
       break;
     }
+    case PKT_INIT: {
+      // Main daemon initialization - reset to safe state
+      Serial.println("INFO: Received INIT");
+      performSafeInit();
+      sendInitReady();
+      watchdogReset();
+      break;
+    }
+    case PKT_SHUTDOWN: {
+      // Main daemon shutdown - enter safe state
+      Serial.println("INFO: Received SHUTDOWN");
+      performSafeShutdown();
+      watchdogDisable();
+      break;
+    }
+    case PKT_KEEPALIVE: {
+      // Keepalive from main daemon - update watchdog timer
+      watchdogReset();
+      break;
+    }
     default:
       Serial.print("ERROR: Unknown pkt type ");
       Serial.println(type, HEX);
@@ -543,7 +648,7 @@ void processPacket(const uint8_t *payload, size_t len) {
   }
 }
 
-// ---------------------- Main Logic ----------------------
+// ---------------------- Periodic Update Functions ----------------------
 
 void updateMuzzleFlash() {
   if (!is_firing) {
@@ -597,13 +702,10 @@ void updateSmokeFan() {
   }
 }
 
-void emitStatus(uint32_t now_ms) {
-  // Build payload
-  uint8_t payload[MAX_PACKET_SIZE];
+size_t buildStatusPayload(uint8_t* payload, uint32_t now_ms) {
   size_t idx = 0;
-  payload[idx++] = PKT_STATUS;
-  payload[idx++] = 11; // payload length
-
+  
+  // Build status flags
   uint8_t flags = 0;
   if (is_firing) flags |= 0x01;
   if (flash_active) flags |= 0x02;
@@ -613,6 +715,7 @@ void emitStatus(uint32_t now_ms) {
   if (smoke_fan_pending_off) flags |= 0x20;
   payload[idx++] = flags;
 
+  // Fan off remaining time
   uint16_t fan_remain = 0;
   if (smoke_fan_pending_off && smoke_fan_off_time_ms > now_ms) {
     fan_remain = (uint16_t)(smoke_fan_off_time_ms - now_ms);
@@ -620,6 +723,7 @@ void emitStatus(uint32_t now_ms) {
   payload[idx++] = (uint8_t)(fan_remain & 0xFF);
   payload[idx++] = (uint8_t)(fan_remain >> 8);
 
+  // Servo positions
   uint16_t s1 = (uint16_t)constrain((int)servo_motion[0].position_us, 0, 3000);
   uint16_t s2 = (uint16_t)constrain((int)servo_motion[1].position_us, 0, 3000);
   uint16_t s3 = (uint16_t)constrain((int)servo_motion[2].position_us, 0, 3000);
@@ -630,18 +734,18 @@ void emitStatus(uint32_t now_ms) {
   payload[idx++] = (uint8_t)(s3 & 0xFF);
   payload[idx++] = (uint8_t)(s3 >> 8);
 
+  // Rate of fire
   uint16_t rpm = (uint16_t)rate_of_fire_rpm;
   payload[idx++] = (uint8_t)(rpm & 0xFF);
   payload[idx++] = (uint8_t)(rpm >> 8);
 
-  uint8_t crc = crc8(payload, idx);
-  payload[idx++] = crc;
+  return idx;
+}
 
-  uint8_t encoded[COBS_BUFFER_SIZE];
-  size_t enc_len = cobsEncode(payload, idx, encoded);
-  // Append delimiter 0x00
-  encoded[enc_len++] = 0x00;
-  Serial.write(encoded, enc_len);
+void emitStatus(uint32_t now_ms) {
+  uint8_t payload[MAX_PACKET_SIZE];
+  size_t payload_len = buildStatusPayload(payload, now_ms);
+  sendPacket(PKT_STATUS, payload, payload_len);
 }
 
 // ---------------------- Arduino Setup & Loop ----------------------
@@ -716,6 +820,10 @@ void loop() {
   updateAllServos();
 
   uint32_t now = millis();
+  
+  // Watchdog check - shutdown if no keepalive for 90 seconds
+  watchdogCheck(now);
+  
   if (now >= next_status_ms) {
     emitStatus(now);
     next_status_ms = now + STATUS_INTERVAL_MS;
