@@ -548,9 +548,9 @@ This will:
 ## Documentation
 
 Additional documentation available:
-- [C23 Migration Guide](C23_MIGRATION.md) - C23 standard migration details and compiler requirements
 - [Logging System](LOGGING.md) - Logging architecture and usage guide
 - [GunFX Pico Controller](../controllers/gunfx/pico/README.md) - Pico firmware protocol and commands
+- [ScaleFX Studio](../app/win32/ScaleFXStudio/README.md) - Windows configuration tool
 
 ## License
 
