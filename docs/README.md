@@ -31,17 +31,22 @@ Integrated sound and effects system for scale RC models, featuring synchronized 
 - **Gun controller via USB CDC** (Raspberry Pi Pico with custom VID/PID)
 - **LED and smoke generator control** managed on Pico; Pi coordinates effects
 
-## Hardware Requirements
+## Hardware
 
-- Raspberry Pi (3/4/Zero 2 W recommended)
-- WM8960 Audio HAT (or compatible I2S audio interface)
-- RC receiver with PWM outputs
-- LED for nozzle flash
-- Smoke generator (optional)
-  - Fan (5V/12V depending on model)
-  - Heater element
-- MOSFET modules for smoke control (if using 12V components)
-- Power supply (5V for Pi, appropriate voltage for smoke generator)
+The ScaleFX system uses two fabricated PCBs:
+
+**ScaleFX Hub Board (Raspberry Pi):**
+- Raspberry Pi Compute Module
+- Integrated WM8960 audio amplifier
+- 10 PWM input channels for RC receiver
+- Power input up to 22V DC
+- USB-C port for GunFX controller connection
+
+**GunFX Board (Raspberry Pi Pico):**
+- Raspberry Pi Pico microcontroller
+- Servo outputs, nozzle flash, smoke control
+- Powered via custom USB-C cable from Hub board
+- No external wiring required
 
 ## Quick Start
 
@@ -69,28 +74,11 @@ Integrated sound and effects system for scale RC models, featuring synchronized 
 
 See [Troubleshooting](#troubleshooting) for more details.
 
-## Wiring
+## Connections
 
-See [WIRING.md](WIRING.md) for complete wiring diagrams and pin assignments.
+Connect the GunFX board to the Hub board using the custom USB-C cable. This cable provides both power and data communication.
 
-**Default GPIO Pin Assignment:**
-- **Engine Toggle PWM Input:** GPIO 17
-- **Gun Trigger PWM Input:** GPIO 27
-- **Smoke Heater Toggle PWM:** GPIO 22
-- **Nozzle Flash LED:** GPIO 23
-- **Smoke Fan Control:** GPIO 24
-- **Smoke Heater Control:** GPIO 25
-- **Pitch Servo PWM Input:** GPIO 13
-- **Pitch Servo PWM Output:** GPIO 7
-- **Yaw Servo PWM Input:** GPIO 16
-- **Yaw Servo PWM Output:** GPIO 8
-
-Note: Gun outputs (nozzle flash LED, smoke fan, smoke heater, turret servos) are driven by the Pico firmware. The Pi reads PWM inputs and coordinates sounds and commands over USB; direct GPIO control of these outputs on the Pi is no longer required.
-
-**Reserved Pins (WM8960 Audio HAT):**
-- GPIO 2, 3: I2C (SCL, SDA)
-- GPIO 17: HAT button (can be reused if button not needed)
-- GPIO 18-21: I2S (BCK, LRCK, DIN, DOUT)
+Connect your RC receiver PWM outputs to the 10 input channels on the Hub board. Channel assignments are configured in `config.yaml`.
 
 ## Installation
 
@@ -225,7 +213,7 @@ engine_fx:
   
   # Engine Toggle PWM Input
   engine_toggle:
-    input_channel: 1           # Input channel 1-12 (mapped to GPIO pins on PCB)
+    input_channel: 1           # Input channel 1-10 (mapped to GPIO pins on PCB)
     threshold_us: 1500         # PWM threshold in microseconds (engine on/off)
   
   # Sound Files and Transitions
@@ -247,11 +235,11 @@ engine_fx:
 gun_fx:
   # Trigger PWM Input
   trigger:
-    input_channel: 2           # Input channel 1-12 (mapped to GPIO pins on PCB)
+    input_channel: 2           # Input channel 1-10 (mapped to GPIO pins on PCB)
   
   # Smoke Generator (optional - omit to disable smoke)
   smoke:
-    heater_toggle_channel: 3   # Input channel 1-12 for heater toggle
+    heater_toggle_channel: 3   # Input channel 1-10 for heater toggle
     heater_pwm_threshold_us: 1500  # PWM threshold for heater toggle
     fan_off_delay_ms: 2000     # Delay before turning smoke fan off after firing stops
   
@@ -271,7 +259,7 @@ gun_fx:
   turret_control:
     pitch:
       servo_id: 1              # Pico servo ID (1, 2, or 3)
-      input_channel: 4         # Input channel 1-12 (mapped to GPIO pins on PCB)
+      input_channel: 4         # Input channel 1-10 (mapped to GPIO pins on PCB)
       input_min_us: 1000       # Minimum input PWM pulse width (µs)
       input_max_us: 2000       # Maximum input PWM pulse width (µs)
       output_min_us: 1000      # Minimum output PWM pulse width (µs)
@@ -282,7 +270,7 @@ gun_fx:
     
     yaw:
       servo_id: 2              # Pico servo ID (1, 2, or 3)
-      input_channel: 5         # Input channel 1-12 (mapped to GPIO pins on PCB)
+      input_channel: 5         # Input channel 1-10 (mapped to GPIO pins on PCB)
       input_min_us: 1000
       input_max_us: 2000
       output_min_us: 1000
@@ -458,28 +446,22 @@ sudo systemctl start sfxhub
 
 ### PWM Not Detected
 
-1. Check RC receiver wiring
+1. Check RC receiver connection to Hub board input channels
 2. Verify PWM signal with oscilloscope or logic analyzer
-3. Check GPIO pin assignments in config.yaml
+3. Check input channel assignments in config.yaml (1-10)
 4. Monitor live PWM values in status output
 
 ### LED Not Working
 
-1. Check GPIO pin assignment
-2. Verify LED wiring (anode to GPIO via resistor, cathode to ground)
-3. Test GPIO manually:
-   ```bash
-   gpio mode 23 out
-   gpio write 23 1  # LED on
-   gpio write 23 0  # LED off
-   ```
+1. Check USB-C cable connection between Hub and GunFX boards
+2. Verify GunFX board is receiving power (status LED should be lit)
+3. Check GunFX Pico logs via USB serial
 
 ### Smoke Generator Issues
 
-1. Ensure MOSFET modules are correctly wired
-2. Check power supply voltage and current capacity
-3. Verify heater resistance (should match power supply)
-4. Monitor fan and heater pin states in logs
+1. Check USB-C cable connection to GunFX board
+2. Verify heater toggle is enabled in config and RC channel is active
+3. Monitor heater and fan states in logs
 
 ### Service Won't Start
 
@@ -514,30 +496,26 @@ scalefx/
 │   ├── engine_fx.c        # Engine sound effects
 │   ├── gun_fx.c           # Gun effects controller
 │   ├── audio_player.c     # Audio mixer and playback
-│   ├── lights.c           # LED control
 │   ├── smoke_generator.c  # Smoke generator control
+│   ├── serial_bus.c       # USB serial communication with Pico
+│   ├── status.c           # Status display
+│   ├── logging.c          # Logging system
 │   └── gpio.c             # GPIO abstraction layer
 ├── include/               # Header files (.h)
-│   ├── engine_fx.h
-│   ├── gun_fx.h
-│   ├── audio_player.h
-│   ├── lights.h
-│   ├── smoke_generator.h
-│   ├── gpio.h
-│   ├── config_loader.h
-│   ├── miniaudio.h
-│   └── pwm_monitor.h
+├── controllers/           # Microcontroller firmware
+│   └── gunfx/pico/        # GunFX Pico controller
+│       ├── gunfx_pico.ino # Arduino sketch
+│       └── README.md      # Pico-specific documentation
+├── app/                   # Desktop applications
+│   └── win32/ScaleFXStudio/  # Windows configuration tool
 ├── build/                 # Build output (generated)
-│   ├── sfxhub             # Main binary
-│   └── *.o                # Object files
 ├── scripts/               # Installation and service scripts
 │   ├── sfxhub.service     # Systemd service unit
 │   ├── install.sh         # Installation script
 │   └── uninstall.sh       # Uninstallation script
 ├── docs/                  # Documentation
 │   ├── README.md          # This file
-│   ├── WIRING.md          # Complete wiring guide
-│   └── GUN_FX_WIRING.md   # Gun FX specific wiring
+│   └── LOGGING.md         # Logging system documentation
 ├── config.yaml            # Configuration file
 ├── Makefile               # Build system
 └── .gitignore             # Git ignore rules
@@ -571,8 +549,8 @@ This will:
 
 Additional documentation available:
 - [C23 Migration Guide](C23_MIGRATION.md) - C23 standard migration details and compiler requirements
-- [Wiring Guide](WIRING.md) - Complete wiring diagrams and hardware setup
 - [Logging System](LOGGING.md) - Logging architecture and usage guide
+- [GunFX Pico Controller](../controllers/gunfx/pico/README.md) - Pico firmware protocol and commands
 
 ## License
 
@@ -587,18 +565,15 @@ For issues, questions, or contributions, please open an issue on the project rep
 - **Programming Language:** C23 standard (ISO/IEC 9899:2023)
 - **Threading:** C23 standard threads (`<threads.h>`)
 - **Compiler:** GCC 14 or later required
-- **Audio:** 44.1kHz, 16-bit stereo WAV files
-- **PWM Input:** 50Hz (20ms period), 1000-2000µs pulse width
-- **GPIO:** 3.3V logic levels
-- **LED Current:** 20mA max per GPIO pin
-- **Smoke Generator:** External power supply required (not from Pi GPIO)
+- **Audio:** 44.1kHz, 16-bit stereo WAV files, integrated WM8960 amplifier
+- **PWM Inputs:** 10 channels, 50Hz (20ms period), 1000-2000µs pulse width
+- **Power Input:** Up to 22V DC on Hub board
+- **GunFX Connection:** USB-C (power and data)
 
 ## Safety Notes
 
-- **Never exceed 3.3V on any GPIO pin** - Raspberry Pi is not 5V tolerant
-- **Use current-limiting resistors** for LEDs (typically 220-330Ω)
-- **Use MOSFET modules** for controlling smoke generator (high current loads)
-- **Ensure proper heat dissipation** for smoke generator heater element
+- **Maximum input voltage is 22V DC** - Do not exceed this on the Hub board power input
+- **Use the custom USB-C cable** to connect GunFX board - provides correct power and data
 - **Test smoke generator outdoors** or in well-ventilated area
 - **Never leave smoke generator unattended** when powered
 

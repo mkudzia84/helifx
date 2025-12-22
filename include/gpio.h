@@ -16,9 +16,9 @@ typedef struct {
 // Callback function type for PWM readings
 typedef void (*PWMCallback)(PWMReading reading, void *user_data);
 
-// Input channel range (1-12 maps to fixed GPIO pins on PCB)
+// Input channel range (1-10 maps to fixed GPIO pins on PCB)
 #define INPUT_CHANNEL_MIN 1
-#define INPUT_CHANNEL_MAX 12
+#define INPUT_CHANNEL_MAX 10
 
 // GPIO pin modes
 typedef enum {
@@ -38,15 +38,15 @@ typedef enum {
 // ============================================================================
 
 /**
- * Convert input channel (1-12) to GPIO pin number
+ * Convert input channel (1-10) to GPIO pin number
  * Input channels are fixed mappings to GPIO pins on the PCB design.
- * @param channel Input channel number (1-12)
+ * @param channel Input channel number (1-10)
  * @return GPIO pin number, or -1 if invalid channel
  */
 int channel_to_gpio(int channel);
 
 /**
- * Validate input channel is in valid range (1-12)
+ * Validate input channel is in valid range (1-10)
  * @param channel Input channel number
  * @return true if valid, false otherwise
  */

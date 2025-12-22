@@ -282,7 +282,6 @@ If you see errors like:
 **Solution:**
 - Check your `config.yaml` pin assignments
 - Ensure no GPIO pins 2, 3, 18-22 are used for other functions
-- See [WIRING.md](WIRING.md) for available GPIO pins
 
 ### I2C/I2S Errors
 
@@ -302,7 +301,6 @@ If you see errors like:
 
 - **WM8960 Datasheet:** [Cirrus Logic WM8960](https://www.cirrus.com/products/wm8960/)
 - **DigiAMP+ Documentation:** [Raspberry Pi Official](https://www.raspberrypi.com/products/iqaudio-digiamp/)
-- **ScaleFX Hub Wiring Guide:** [WIRING.md](WIRING.md)
 - **Raspberry Pi Pinout:** [pinout.xyz](https://pinout.xyz/)
 
 ## Summary

@@ -341,5 +341,4 @@ Use filtering with `grep` or `journalctl` to focus on specific components or log
 
 ## Related Documentation
 - README.md - System overview
-- WIRING.md - Hardware pinout
 - config.yaml - Configuration file format

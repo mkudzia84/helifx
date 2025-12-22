@@ -300,7 +300,7 @@ int config_validate(const ScaleFXConfig *config) {
     // Engine validation (only if present)
     if (engine_present) {
         if (!is_valid_channel(config->engine.engine_toggle.input_channel)) {
-            LOG_ERROR(LOG_CONFIG, "Invalid engine input_channel: %d (must be 1-12)", 
+            LOG_ERROR(LOG_CONFIG, "Invalid engine input_channel: %d (must be 1-10)", 
                       config->engine.engine_toggle.input_channel);
             return -1;
         }
@@ -317,7 +317,7 @@ int config_validate(const ScaleFXConfig *config) {
     // Gun validation (only if present)
     if (gun_present) {
         if (!is_valid_channel(config->gun.trigger.input_channel)) {
-            LOG_ERROR(LOG_CONFIG, "Invalid gun trigger input_channel: %d (must be 1-12)", 
+            LOG_ERROR(LOG_CONFIG, "Invalid gun trigger input_channel: %d (must be 1-10)", 
                       config->gun.trigger.input_channel);
             return -1;
         }
@@ -325,7 +325,7 @@ int config_validate(const ScaleFXConfig *config) {
         // Validate smoke heater channel if present
         if (config->gun.smoke.heater_toggle_channel != 0 && 
             !is_valid_channel(config->gun.smoke.heater_toggle_channel)) {
-            LOG_ERROR(LOG_CONFIG, "Invalid smoke heater_toggle_channel: %d (must be 1-12)", 
+            LOG_ERROR(LOG_CONFIG, "Invalid smoke heater_toggle_channel: %d (must be 1-10)", 
                       config->gun.smoke.heater_toggle_channel);
             return -1;
         }
@@ -335,7 +335,7 @@ int config_validate(const ScaleFXConfig *config) {
     // Validate servo inputs and servo_id (outputs handled by Pico)
     if (config->gun.turret_control.pitch.input_channel > 0) {
         if (!is_valid_channel(config->gun.turret_control.pitch.input_channel)) {
-            LOG_ERROR(LOG_CONFIG, "Invalid pitch input_channel: %d (must be 1-12)",
+            LOG_ERROR(LOG_CONFIG, "Invalid pitch input_channel: %d (must be 1-10)",
                       config->gun.turret_control.pitch.input_channel);
             return -1;
         }
@@ -346,7 +346,7 @@ int config_validate(const ScaleFXConfig *config) {
     }
     if (config->gun.turret_control.yaw.input_channel > 0) {
         if (!is_valid_channel(config->gun.turret_control.yaw.input_channel)) {
-            LOG_ERROR(LOG_CONFIG, "Invalid yaw input_channel: %d (must be 1-12)",
+            LOG_ERROR(LOG_CONFIG, "Invalid yaw input_channel: %d (must be 1-10)",
                       config->gun.turret_control.yaw.input_channel);
             return -1;
         }

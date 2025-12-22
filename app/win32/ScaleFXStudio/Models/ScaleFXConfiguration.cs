@@ -45,7 +45,7 @@ public class EngineFxConfig
 public class PwmInputConfig
 {
     [Category("PWM")]
-    [Description("Input channel number (1-12)")]
+    [Description("Input channel number (1-10)")]
     [YamlMember(Alias = "input_channel")]
     public int InputChannel { get; set; }
 
@@ -131,7 +131,7 @@ public class GunFxConfig
 public class TriggerConfig
 {
     [Category("Trigger")]
-    [Description("Input channel for trigger PWM (1-12)")]
+    [Description("Input channel for trigger PWM (1-10)")]
     [YamlMember(Alias = "input_channel")]
     public int InputChannel { get; set; }
 }
@@ -144,7 +144,7 @@ public class SmokeConfig
     public bool Enabled { get; set; } = true;
 
     [Category("Heater")]
-    [Description("Input channel for heater toggle PWM (1-12)")]
+    [Description("Input channel for heater toggle PWM (1-10)")]
     [YamlMember(Alias = "heater_toggle_channel")]
     public int HeaterToggleChannel { get; set; }
 
@@ -185,7 +185,7 @@ public class ServoConfig
     public int ServoId { get; set; } = 1;
 
     [Category("PWM Input")]
-    [Description("Input channel (1-12)")]
+    [Description("Input channel (1-10)")]
     [YamlMember(Alias = "input_channel")]
     public int InputChannel { get; set; }
 

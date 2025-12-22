@@ -32,8 +32,6 @@ static const int CHANNEL_TO_GPIO[INPUT_CHANNEL_MAX + 1] = {
     20,     // Channel 8 -> GPIO 20
     21,     // Channel 9 -> GPIO 21
     24,     // Channel 10 -> GPIO 24
-    25,     // Channel 11 -> GPIO 25
-    26,     // Channel 12 -> GPIO 26
 };
 
 int channel_to_gpio(int channel) {

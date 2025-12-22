@@ -31,7 +31,7 @@ public class ServoAxisPanel
     public int Channel
     {
         get => ChannelInput.SelectedIndex + 1;
-        set => ChannelInput.SelectedIndex = Math.Clamp(value - 1, 0, 11);
+        set => ChannelInput.SelectedIndex = Math.Clamp(value - 1, 0, 9);
     }
 
     public int ServoId

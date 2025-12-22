@@ -1,30 +1,66 @@
 # Helicopter FX Wiring Guide
 
-Complete wiring diagrams and pin assignments for KA-50 helicopter FX system.
+Complete wiring diagrams and pin assignments for ScaleFX helicopter FX system.
 
 ## Table of Contents
 - [Overview](#overview)
-- [GPIO Pin Assignments](#gpio-pin-assignments)
+- [System Architecture](#system-architecture)
+- [Raspberry Pi GPIO Assignments](#raspberry-pi-gpio-assignments)
 - [RC Receiver Connections](#rc-receiver-connections)
-- [LED Wiring](#led-wiring)
-- [Smoke Generator Wiring](#smoke-generator-wiring)
 - [Audio HAT Connections](#audio-hat-connections)
+- [GunFX Pico Wiring](#gunfx-pico-wiring)
 - [Power Supply](#power-supply)
 - [Complete System Diagram](#complete-system-diagram)
 
 ## Overview
 
-The system uses a Raspberry Pi with an audio HAT (WM8960 Audio HAT or Raspberry Pi DigiAMP+) for audio output and GPIO pins for PWM input monitoring and component control.
+The system uses a distributed architecture:
+- **Raspberry Pi** with audio HAT for sound playback and PWM input monitoring
+- **Raspberry Pi Pico** (GunFX controller) for gun hardware outputs
 
 **Important Notes:**
-- All GPIO signals are 3.3V logic. Never connect 5V signals directly to GPIO pins!
-- This system uses **libgpiod library** for GPIO control with hardware PWM capabilities
-- Audio HAT pins are automatically protected by the software and cannot be used for other functions
-- Supported audio HATs: WM8960 Audio HAT, Raspberry Pi DigiAMP+
+- All Raspberry Pi GPIO signals are 3.3V logic. Never connect 5V signals directly to GPIO pins!
+- This system uses **pigpio library** for GPIO control
+- Audio HAT pins are automatically protected by the software
+- Gun outputs (servos, LEDs, smoke) are controlled by the Pico, not Pi GPIO
 
-## GPIO Pin Assignments
+## System Architecture
 
-### Default Configuration
+```
+                    ┌─────────────────────────────────────────┐
+                    │           RASPBERRY PI                  │
+                    │         (Audio + PWM Inputs)            │
+                    │                                         │
+RC Receiver ───────►│  GPIO 17: Engine Toggle                 │
+                    │  GPIO 27: Gun Trigger                   │
+                    │  GPIO 22: Smoke Heater Toggle           │
+                    │  GPIO 13: Pitch Servo Input             │
+                    │  GPIO 16: Yaw Servo Input               │
+                    │                                         │
+                    │  Audio HAT ──────────────► Speakers     │
+                    │                                         │
+                    │  USB ─────────────────────────┐         │
+                    └───────────────────────────────┼─────────┘
+                                                    │
+                                                    ▼
+                    ┌───────────────────────────────────────────┐
+                    │         RASPBERRY PI PICO                 │
+                    │           (GunFX Controller)              │
+                    │                                           │
+                    │  GPIO 1  ─────────────────► Servo 1       │
+                    │  GPIO 2  ─────────────────► Servo 2       │
+                    │  GPIO 3  ─────────────────► Servo 3       │
+                    │  GPIO 13 ─────────────────► Blue LED      │
+                    │  GPIO 14 ─────────────────► Yellow LED    │
+                    │  GPIO 16 ─────────────────► Smoke Fan     │
+                    │  GPIO 17 ─────────────────► Smoke Heater  │
+                    │  GPIO 25 ─────────────────► Nozzle Flash  │
+                    └───────────────────────────────────────────┘
+```
+
+## Raspberry Pi GPIO Assignments
+
+### PWM Input Pins
 
 | Function | GPIO Pin | Direction | Notes |
 |----------|----------|-----------|-------|
@@ -33,40 +69,21 @@ The system uses a Raspberry Pi with an audio HAT (WM8960 Audio HAT or Raspberry 
 | Smoke Heater Toggle PWM | 22 | Input | RC receiver channel for smoke heater |
 | Pitch Servo PWM Input | 13 | Input | RC receiver channel for pitch control |
 | Yaw Servo PWM Input | 16 | Input | RC receiver channel for yaw control |
-| Nozzle Flash LED | 23 | Output | LED control (active high) |
-| Smoke Fan Control | 24 | Output | Controls MOSFET for smoke fan |
-| Smoke Heater Control | 25 | Output | Controls MOSFET for smoke heater |
-| Pitch Servo PWM Output | 7 | Output | PWM to pitch servo |
-| Yaw Servo PWM Output | 8 | Output | PWM to yaw servo |
 
 ### Reserved Pins (Audio HATs)
 
 **⚠️ CRITICAL:** These pins are used by audio HATs and are **automatically protected** by the software.
 
-#### WM8960 Audio HAT / Raspberry Pi DigiAMP+
+| Function | GPIO Pin | Protocol | Notes |
+|----------|----------|----------|-------|
+| I2C SDA | 2 | I2C | Audio HAT control |
+| I2C SCL | 3 | I2C | Audio HAT control |
+| I2S BCK | 18 | I2S | Audio bit clock |
+| I2S LRCK | 19 | I2S | Audio word select |
+| I2S DIN | 20 | I2S | Audio data in |
+| I2S DOUT | 21 | I2S | Audio data out |
 
-| Function | GPIO Pin | Protocol | WM8960 | DigiAMP+ | Notes |
-|----------|----------|----------|---------|----------|-------|
-| I2C SDA | 2 | I2C | ✓ | ✓ | Audio HAT communication (codec control) |
-| I2C SCL | 3 | I2C | ✓ | ✓ | Audio HAT communication (codec control) |
-| I2S BCK | 18 | I2S | ✓ | ✓ | Audio bit clock (serial clock) |
-| I2S LRCK | 19 | I2S | ✓ | ✓ | Audio word select (left/right clock) |
-| I2S DIN | 20 | I2S | ✓ | ✓ | Audio data input to codec (ADC) |
-| I2S DOUT | 21 | I2S | ✓ | ✓ | Audio data output from codec (DAC) |
-| Shutdown | 22 | Digital | ✗ | ✓ | DigiAMP+ amplifier shutdown control |
-
-**Protected pins:** GPIO 2, 3, 18, 19, 20, 21, 22
-
-The software automatically prevents these pins from being used for other functions.
-
-### Available GPIO Pins
-
-These pins are available for additional features:
-- GPIO 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 23, 24, 25, 26, 27
-
-**Reserved by Audio HATs:** GPIO 2, 3, 18, 19, 20, 21, 22 (protected by software)
-
-**Note:** Some pins have special functions (SPI, UART) - check Raspberry Pi pinout before use.
+**Protected pins:** GPIO 2, 3, 18, 19, 20, 21
 
 ## RC Receiver Connections
 
@@ -89,9 +106,7 @@ RC Receiver (5V)  -->  Level Shifter  -->  Raspberry Pi (3.3V)
     GND ----------------  Common Ground  ---------- GND
 ```
 
-**Recommended:** Bi-directional logic level converter (4-channel, 5V to 3.3V)
-
-### Wiring Diagram - RC Receiver PWM Inputs
+### Wiring Diagram
 
 ```
 RC Receiver                    Raspberry Pi
@@ -99,205 +114,28 @@ RC Receiver                    Raspberry Pi
 
 Channel 1 (Throttle)
    Signal  ------------------>  GPIO 17 (Engine Toggle)
-   +5V     (not connected)
-   GND     ------------------>  GND (Pin 6)
+   GND     ------------------>  GND
 
 Channel 2 (Gun Trigger)
    Signal  ------------------>  GPIO 27 (Gun Trigger)
-   +5V     (not connected)
-   GND     ------------------>  GND (Pin 6)
+   GND     ------------------>  GND
 
 Channel 3 (Smoke Heater)
    Signal  ------------------>  GPIO 22 (Heater Toggle)
-   +5V     (not connected)
-   GND     ------------------>  GND (Pin 6)
+   GND     ------------------>  GND
+
+Channel 4 (Pitch)
+   Signal  ------------------>  GPIO 13 (Pitch Input)
+   GND     ------------------>  GND
+
+Channel 5 (Yaw)
+   Signal  ------------------>  GPIO 16 (Yaw Input)
+   GND     ------------------>  GND
 ```
 
 **Important:** 
-- If RC receiver outputs 5V signals, insert level shifter on signal lines
-- All grounds must be connected together (common ground)
 - Do NOT connect RC receiver +5V to any GPIO pin
-
-## LED Wiring
-
-### Nozzle Flash LED
-
-```
-GPIO 23 (Pin 16) ----[ 330Ω ]----[LED]---- GND (Pin 14)
-                     Resistor    (Anode)  (Cathode)
-```
-
-**Component Selection:**
-- **LED:** Any standard LED (red/orange/white recommended)
-- **Resistor:** 220-330Ω for 3.3V logic
-- **Current:** ~10-15mA per LED
-- **Polarity:** Long leg (anode) to resistor, short leg (cathode) to ground
-
-### Multiple LEDs (Parallel)
-
-For brighter flash, use multiple LEDs in parallel:
-
-```
-                    ----[ 330Ω ]----[LED1]----+
-                    |                         |
-GPIO 23 (Pin 16) ---+----[ 330Ω ]----[LED2]----+--- GND
-                    |                         |
-                    ----[ 330Ω ]----[LED3]----+
-```
-
-**Maximum:** 3-4 LEDs (total current <50mA to protect GPIO)
-
-## Smoke Generator Wiring
-
-### IMPORTANT SAFETY NOTES
-- Smoke generator requires external power supply (NOT from Pi GPIO)
-- Use MOSFET modules to control high-current devices
-- Never connect smoke generator directly to GPIO pins
-- Ensure proper heat dissipation for heater element
-- Use appropriate gauge wire for current requirements
-
-### MOSFET Module Wiring
-
-```
-Raspberry Pi                MOSFET Module              Smoke Component
-------------                -------------              ---------------
-
-GPIO 24 (Fan) ----------->  Signal Input
-                           
-GND (Pin 20) ------------>  GND
-                           
-                            VCC (3.3V)  <--- Optional, for module LED
-                           
-External 12V+ ----------->  V+ Input
-                           
-                            V+ Output  ------>  Fan/Heater (+)
-                           
-External GND ------------>  GND Common
-                           
-                            GND Common <------>  Fan/Heater (-)
-```
-
-### Complete Smoke Generator Wiring
-
-```
-Power Supply (12V 2A)           MOSFET Modules                 Smoke Generator
----------------------           --------------                 ---------------
-
-(+) 12V ----+------------------> V+ (Fan Module)
-            |
-            +------------------> V+ (Heater Module)
-            
-(-) GND ----+------------------> GND (Fan Module) --------+
-            |                                             |
-            +------------------> GND (Heater Module) -----+--- Smoke GND Common
-            |
-            +------------------> Raspberry Pi GND
-
-
-Raspberry Pi
-------------
-GPIO 24 (Pin 18) ------------>  Signal (Fan Module)
-GPIO 25 (Pin 22) ------------>  Signal (Heater Module)
-GND (Pin 20) ----------------->  GND (both modules)
-
-
-Fan Module Output (+) --------->  Smoke Fan (+)
-Fan Module GND ----------------->  Smoke Fan (-)
-
-Heater Module Output (+) ------->  Smoke Heater (+)
-Heater Module GND -------------->  Smoke Heater (-)
-```
-
-### Recommended MOSFET Modules
-- **Model:** IRF520 or similar N-channel MOSFET module
-- **Voltage Rating:** 24V or higher
-- **Current Rating:** 5A or higher per module
-- **Logic Level:** 3.3V compatible (important!)
-
-### Smoke Generator Specifications
-- **Fan Voltage:** Typically 5V or 12V (check your model)
-- **Fan Current:** 100-500mA
-- **Heater Voltage:** 12V (most common)
-- **Heater Current:** 1-3A (depends on resistance)
-- **Heater Resistance:** 4-12Ω typical
-
-**Calculate Power:**
-- P = V² / R
-- Example: 12V with 6Ω heater = 24W, 2A current
-- Ensure power supply can handle total current (fan + heater)
-
-## Servo Wiring
-
-### Turret Control Servos
-
-The system supports two servo axes for turret control: pitch (elevation) and yaw (rotation). Each servo requires:
-1. **PWM input** from RC receiver (monitored by GPIO)
-2. **PWM output** to the servo motor
-
-**Input Stage (RC Receiver → Raspberry Pi):**
-```
-RC Receiver                    Raspberry Pi
------------                    -----------
-
-Pitch Channel (CH3)
-   Signal  ------------------>  GPIO 13 (Pin 33)
-   GND     ------------------>  GND (shared)
-
-Yaw Channel (CH4)
-   Signal  ------------------>  GPIO 16 (Pin 36)
-   GND     ------------------>  GND (shared)
-```
-
-**Output Stage (Raspberry Pi → Servos):**
-```
-Raspberry Pi                   Servo Motor
-------------                  -----------
-
-GPIO 7 (Pin 26) ----[PWM]----->  Signal (white/yellow)
-3.3V (Pin 1) ---[optional]----->  Power (red) - if servo is 3.3V
-                                 [OR use external 5V supply]
-
-GND (Pin 9) --------[GND]----->  Ground (black/brown)
-```
-
-**Note:** Most RC servos require 5V power. Options:
-- **Option 1:** Use external 5V supply for servo power
-- **Option 2:** Use servo voltage reducer (7.5V to 5V)
-- **Option 3:** Use low-torque servos rated for 3.3V (not recommended)
-
-### Servo Specifications
-
-| Parameter | Value | Notes |
-|-----------|-------|-------|
-| Control Type | PWM | 1000-2000µs pulse width |
-| Update Rate | 50 Hz | Servo refresh rate |
-| Max Speed | 500 µs/sec | Configurable via config.yaml |
-| Max Accel | 2000 µs/sec² | Configurable via config.yaml |
-| Voltage | 5V or higher | Depends on servo model |
-| Current | 100-500mA per servo | At stall |
-
-### Multi-Servo Power Supply
-
-For two servos with external power:
-```
-5V Power Supply              Servo 1         Servo 2
----------------              -------         -------
-
-(+) 5V ----+---[PWM]------->  Signal      
-           |                 Power(+)
-           +---[PWM]------->  Signal      
-           |                 Power(+)
-           |                 (common to both)
-           
-(-) GND ----+---[GND]------->  GND
-           |                 
-           +---[GND]------->  GND
-```
-
-**Recommended Power Supply:**
-- **Voltage:** 5V DC
-- **Current:** Minimum 1A (2A recommended for two servos under load)
-- **Type:** Regulated DC power supply
+- All grounds must be connected together (common ground)
 
 ## Audio HAT Connections
 
@@ -339,111 +177,149 @@ Right (-) ----------------->    Right Speaker (-)
 - **Connector:** Barrel jack or screw terminals
 - **Type:** Regulated DC power supply
 
+## GunFX Pico Wiring
+
+The GunFX Pico controller handles all gun hardware outputs. See [GUN_FX_WIRING.md](GUN_FX_WIRING.md) for detailed Pico wiring diagrams.
+
+**Pico Pin Summary:**
+
+| GPIO | Function |
+|------|----------|
+| 1 | Servo 1 |
+| 2 | Servo 2 |
+| 3 | Servo 3 |
+| 13 | Blue LED (status) |
+| 14 | Yellow LED (heater indicator) |
+| 16 | Smoke Fan Motor |
+| 17 | Smoke Heater |
+| 25 | Nozzle Flash (PWM) |
+
+## Audio HAT Connections
+
+### WM8960 Audio HAT
+
+The WM8960 Audio HAT mounts directly on the Raspberry Pi GPIO header.
+
+**Connections:**
+- Automatically uses I2C (GPIO 2, 3) and I2S (GPIO 18-21)
+- Speaker output: 3W per channel (left/right)
+- Headphone output: 3.5mm jack
+
+**Speaker Wiring:**
+```
+Speaker Terminals on HAT        Speakers
+------------------------        --------
+Left (+) ------------------>    Left Speaker (+)
+Left (-) ------------------>    Left Speaker (-)
+Right (+) ----------------->    Right Speaker (+)
+Right (-) ----------------->    Right Speaker (-)
+```
+
+**Recommended Speakers:**
+- Impedance: 4-8Ω
+- Power: 3-5W
+- Type: Full-range or small 2-way
+
+## Power Supply
+
+### Raspberry Pi Power
+- **Voltage:** 5V DC
+- **Current:** Minimum 2.5A (3A recommended for Pi 4)
+- **Connector:** USB-C (Pi 4) or Micro-USB (Pi 3)
+
+### Pico Power
+- **Voltage:** 5V via USB from Raspberry Pi
+- **Current:** ~50mA (Pico draws minimal power)
+
+### Smoke Generator Power
+- **Voltage:** 12V DC (typical)
+- **Current:** 3-5A minimum (depends on heater + fan)
+- **Connector:** Barrel jack or screw terminals
+
+### Servo Power
+- **Voltage:** 5-6V DC
+- **Current:** 500mA+ per servo
+
 ### Ground Connection
 **CRITICAL:** All system grounds must be connected together:
 - Raspberry Pi ground
+- Pico ground (via USB)
 - RC receiver ground  
 - Smoke generator power supply ground
-- External power supply grounds
-
-**Do NOT:**
-- Power the Pi from RC receiver BEC (insufficient current)
-- Power smoke generator from Pi GPIO (will damage Pi)
-- Connect different voltage power supplies together (only grounds)
+- Servo power supply ground
 
 ## Complete System Diagram
 
 ```
-                                    RASPBERRY PI 4
-                                    ==============
-                                    (with WM8960 Audio HAT)
+                    ┌─────────────────────────────────────────┐
+                    │           RASPBERRY PI 4                │
+                    │         (with WM8960 Audio HAT)         │
+                    │                                         │
+RC Receiver ───────►│  GPIO 17: Engine Toggle                 │
+(PWM Inputs)        │  GPIO 27: Gun Trigger                   │
+                    │  GPIO 22: Smoke Heater Toggle           │
+                    │  GPIO 13: Pitch Input                   │
+                    │  GPIO 16: Yaw Input                     │
+                    │                                         │
+                    │  Audio HAT ──────────────► Speakers     │
+                    │                                         │
+                    │  USB ─────────────────────────┐         │
+                    └───────────────────────────────┼─────────┘
+                                                    │
+                                                    ▼ USB CDC
+                    ┌───────────────────────────────────────────┐
+                    │         RASPBERRY PI PICO                 │
+                    │                                           │
+                    │  GPIO 1-3 ────────────────► Servos        │
+                    │  GPIO 13,14 ──────────────► Status LEDs   │
+                    │  GPIO 16,17 ──[MOSFET]───► Smoke Gen      │
+                    │  GPIO 25 ─────────────────► Nozzle Flash  │
+                    └───────────────────────────────────────────┘
 
-RC Receiver                         GPIO Pins                    Components
------------                         ---------                    ----------
-
-Throttle Ch --(3.3V PWM)-------->  GPIO 17     GPIO 23 -------> [LED] -> GND
-                                                  |
-Gun Ch ------(3.3V PWM)-------->   GPIO 27       +--[ 330Ω ]
-                                                     (resistor)
-Heater Ch ---(3.3V PWM)-------->   GPIO 22
-                                   
-                                   GPIO 24 ------> MOSFET Module --> Fan (12V)
-                                   
-                                   GPIO 25 ------> MOSFET Module --> Heater (12V)
-
-Common GND --(shared)---------->   GND Pins
-                                   (6,9,14,20,25,30,34,39)
-
-
-Power Supplies
---------------
-5V 3A ---------> USB-C (Pi power)
-
-12V 3A -------+-> MOSFET Modules V+
-              |
-              +-> Common GND to Pi GND
-
-
-Audio Output
-------------
-HAT Speakers --> Left/Right Speakers (4-8Ω, 3W)
-HAT 3.5mm ----> Headphones/Amplifier (optional)
+Power Supplies:
+  5V 3A ────► Pi (USB-C)
+  5V 2A ────► Servos (external)
+  12V 3A ───► Smoke Generator (via MOSFET modules on Pico)
 ```
 
-## Pin Reference (Physical Numbering)
+## Pin Reference (Raspberry Pi Physical Numbering)
 
 ```
 Raspberry Pi 40-Pin Header
 ==========================
 
      3.3V  (1) (2)  5V
-     SDA   (3) (4)  5V
-     SCL   (5) (6)  GND
+     SDA   (3) (4)  5V           ◄── Audio HAT I2C
+     SCL   (5) (6)  GND          ◄── Audio HAT I2C
     GPIO4  (7) (8)  GPIO14
       GND  (9) (10) GPIO15
-   GPIO17 (11) (12) GPIO18  <-- I2S (Audio HAT)
-   GPIO27 (13) (14) GND
-   GPIO22 (15) (16) GPIO23  <-- LED
-     3.3V (17) (18) GPIO24  <-- Smoke Fan
+   GPIO17 (11) (12) GPIO18       ◄── Engine Toggle / I2S
+   GPIO27 (13) (14) GND          ◄── Gun Trigger
+   GPIO22 (15) (16) GPIO23       ◄── Smoke Toggle
+     3.3V (17) (18) GPIO24
    GPIO10 (19) (20) GND
-    GPIO9 (21) (22) GPIO25  <-- Smoke Heater
+    GPIO9 (21) (22) GPIO25
    GPIO11 (23) (24) GPIO8
       GND (25) (26) GPIO7
     GPIO0 (27) (28) GPIO1
     GPIO5 (29) (30) GND
     GPIO6 (31) (32) GPIO12
-   GPIO13 (33) (34) GND
-   GPIO19 (35) (36) GPIO16  <-- I2S (Audio HAT)
-   GPIO26 (37) (38) GPIO20  <-- I2S (Audio HAT)
-      GND (39) (40) GPIO21  <-- I2S (Audio HAT)
+   GPIO13 (33) (34) GND          ◄── Pitch Input
+   GPIO19 (35) (36) GPIO16       ◄── I2S / Yaw Input
+   GPIO26 (37) (38) GPIO20       ◄── I2S
+      GND (39) (40) GPIO21       ◄── I2S
 ```
 
 ## Testing
 
 ### Test PWM Input
 ```bash
-# Monitor GPIO 17 for PWM pulses
-sudo pigpiod
+# Start pigpiod daemon
+sudo systemctl start pigpiod
+
+# Monitor GPIO for PWM
 pigs modes 17 0  # Set as input
 pigs r 17        # Read current state
-```
-
-### Test LED Output
-```bash
-# Manually control LED on GPIO 23
-gpio mode 23 out
-gpio write 23 1  # LED on
-sleep 1
-gpio write 23 0  # LED off
-```
-
-### Test MOSFET Output
-```bash
-# Manually control fan on GPIO 24
-gpio mode 24 out
-gpio write 24 1  # Fan on
-sleep 2
-gpio write 24 0  # Fan off
 ```
 
 ## Troubleshooting
@@ -454,43 +330,37 @@ gpio write 24 0  # Fan off
 3. Ensure PWM frequency is ~50Hz (20ms period)
 4. Test with known working servo/ESC on same channel
 
-### LED Not Working
-1. Check LED polarity (anode to resistor, cathode to ground)
-2. Verify resistor value (220-330Ω)
-3. Test GPIO pin with `gpio` command
-4. Measure voltage across LED when on (~2-3V)
-
-### Smoke Generator Not Working
-1. Verify MOSFET module logic voltage (should work with 3.3V)
-2. Check external power supply voltage (12V)
-3. Measure current draw (should be 1-3A for heater)
-4. Test MOSFET module with multimeter
-5. Check for loose connections on screw terminals
+### Pico Not Detected
+1. Check USB cable (must support data, not just power)
+2. Verify Pico firmware is flashed correctly
+3. Check dmesg for USB enumeration: `dmesg | grep -i usb`
+4. Look for /dev/ttyACM0 device
 
 ### Ground Issues
 - **Symptom:** Erratic behavior, random resets
 - **Fix:** Ensure all grounds connected together
-- **Check:** Continuity between Pi GND, receiver GND, power supply GND
+- **Check:** Continuity between Pi GND, Pico GND, receiver GND, power supply GND
 
 ## Bill of Materials
 
 | Component | Quantity | Notes |
 |-----------|----------|-------|
 | Raspberry Pi 4 (2GB+) | 1 | Main controller |
+| Raspberry Pi Pico | 1 | GunFX controller |
 | WM8960 Audio HAT | 1 | I2S audio interface |
 | MicroSD Card (16GB+) | 1 | Operating system |
 | 5V 3A USB-C PSU | 1 | Pi power supply |
+| 5V 2A DC PSU | 1 | Servo power supply |
 | 12V 3A DC PSU | 1 | Smoke generator power |
 | MOSFET Module (IRF520) | 2 | Fan + heater control |
-| LED (red/orange) | 1-4 | Nozzle flash |
-| 330Ω Resistor | 1-4 | LED current limiting |
+| RC Servos | 2-3 | Turret control |
+| LED (various) | 3 | Flash + status |
+| 220Ω Resistor | 3 | LED current limiting |
 | Smoke Generator | 1 | Fan + heater unit |
 | Speakers 4-8Ω 3W | 2 | Audio output |
 | Level Shifter (optional) | 1 | If using 5V RC signals |
-| Jumper Wires | ~20 | Connections |
-| Breadboard (optional) | 1 | Prototyping |
-
-**Total Cost:** ~$80-120 USD (excluding RC receiver and helicopter model)
+| USB Cable (data) | 1 | Pi to Pico |
+| Jumper Wires | ~30 | Connections |
 
 ## Safety Checklist
 
@@ -498,16 +368,16 @@ gpio write 24 0  # Fan off
 - [ ] RC receiver ground connected to Pi ground
 - [ ] LED resistors installed (prevent overcurrent)
 - [ ] MOSFET modules rated for smoke generator current
-- [ ] External power supply for smoke generator (not from Pi)
+- [ ] External power supplies for high-current loads
 - [ ] All power supply grounds connected together
 - [ ] Heat dissipation adequate for smoke heater
-- [ ] Wire gauge appropriate for current (12AWG for high current)
 - [ ] Secure connections (no loose wires)
-- [ ] Tested individual components before full system integration
+- [ ] Tested individual components before full integration
 
 ## Additional Resources
 
 - [Raspberry Pi Pinout](https://pinout.xyz/)
 - [WM8960 Audio HAT Documentation](https://www.waveshare.com/wiki/WM8960_Audio_HAT)
 - [pigpio Library Documentation](http://abyz.me.uk/rpi/pigpio/)
-- [RC PWM Signal Explanation](https://oscarliang.com/rc-servo-pwm-signal/)
+- [Arduino-Pico Documentation](https://arduino-pico.readthedocs.io/)
+

@@ -5,7 +5,7 @@
 # Supports: WM8960 Audio HAT, Raspberry Pi DigiAMP+
 # Reserved pins are automatically protected by software
 
-# Input Channel Mapping (1-12):
+# Input Channel Mapping (1-10):
 # Channels are mapped to fixed GPIO pins on the PCB design
 # All gun FX outputs (servos, flash, smoke) are controlled via Pico over USB serial
 
@@ -16,7 +16,7 @@ engine_fx:
   
   # Engine Toggle PWM Input
   engine_toggle:
-    input_channel: 1           # Input channel 1-12 (mapped to GPIO pins on PCB)
+    input_channel: 1           # Input channel 1-10 (mapped to GPIO pins on PCB)
     threshold_us: 1500         # PWM threshold in microseconds (engine on/off)
   
   # Sound Files and Transitions
@@ -38,11 +38,11 @@ gun_fx:
   
   # Trigger PWM Input
   trigger:
-    input_channel: 2           # Input channel 1-12 (mapped to GPIO pins on PCB)
+    input_channel: 2           # Input channel 1-10 (mapped to GPIO pins on PCB)
   
   # Smoke Generator (heater toggle via Pi, actual control via Pico)
   smoke:
-    heater_toggle_channel: 3   # Input channel 1-12 for heater toggle
+    heater_toggle_channel: 3   # Input channel 1-10 for heater toggle
     heater_pwm_threshold_us: 1500  # PWM threshold for heater toggle
     fan_off_delay_ms: 2000     # Delay before turning smoke fan off after firing stops
   
@@ -64,7 +64,7 @@ gun_fx:
   turret_control:
     pitch:
       servo_id: 1              # Pico servo ID (1, 2, or 3)
-      input_channel: 4         # Input channel 1-12 (mapped to GPIO pins on PCB)
+      input_channel: 4         # Input channel 1-10 (mapped to GPIO pins on PCB)
       input_min_us: 1000       # Minimum input PWM pulse width (µs)
       input_max_us: 2000       # Maximum input PWM pulse width (µs)
       output_min_us: 1000      # Minimum output PWM pulse width (µs)
@@ -77,7 +77,7 @@ gun_fx:
     
     yaw:
       servo_id: 2              # Pico servo ID (1, 2, or 3)
-      input_channel: 5         # Input channel 1-12 (mapped to GPIO pins on PCB)
+      input_channel: 5         # Input channel 1-10 (mapped to GPIO pins on PCB)
       input_min_us: 1000       # Minimum input PWM pulse width (µs)
       input_max_us: 2000       # Maximum input PWM pulse width (µs)
       output_min_us: 1000      # Minimum output PWM pulse width (µs)

@@ -16,7 +16,7 @@ typedef struct RateOfFireConfig {
 // Servo configuration with defaults
 typedef struct ServoConfig {
     int servo_id;               // Pico servo ID (1, 2, or 3)
-    int input_channel;          // Input channel 1-12
+    int input_channel;          // Input channel 1-10
     int input_min_us;           // Default: 1000
     int input_max_us;           // Default: 2000
     int output_min_us;          // Default: 1000
@@ -30,13 +30,13 @@ typedef struct ServoConfig {
 
 // Engine Toggle configuration
 typedef struct EngineToggleConfig {
-    int input_channel;         // Input channel 1-12
+    int input_channel;         // Input channel 1-10
     int threshold_us;          // Default: 1500
 } EngineToggleConfig;
 
 // Gun Trigger configuration
 typedef struct TriggerConfig {
-    int input_channel;         // Input channel 1-12
+    int input_channel;         // Input channel 1-10
 } TriggerConfig;// Engine Sounds Transitions configuration
 typedef struct EngineSoundsTransitionsConfig {
     int starting_offset_ms;    // Default: 60000 (60 seconds)
@@ -68,7 +68,7 @@ typedef struct EngineFXConfig {
 
 // Smoke configuration
 typedef struct SmokeConfig {
-    int heater_toggle_channel; // Input channel 1-12
+    int heater_toggle_channel; // Input channel 1-10
     int heater_pwm_threshold_us; // Default: 1500
     int fan_off_delay_ms;        // Default: 2000
 } SmokeConfig;

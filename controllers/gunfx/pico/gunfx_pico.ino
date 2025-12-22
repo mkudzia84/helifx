@@ -29,30 +29,30 @@
 #include <Servo.h>
 #include <math.h>
 
-// ---------------------- Pin Configuration (Right Side of Board) ----------------------
-// Raspberry Pi Pico Pinout - All outputs on right side, servos consecutive
-// Right side reference: Pins 28 (GP19), 30 (GP20), 32 (GP21), 34 (GP22), 36 (GP23), 40 (GP25)
-//
-// Pin layout:     Left (1-20)         Right (21-40)
-//                 ──────────          ───────────
-//                 ...                 ...
-//                 ...                 GP16 · GP17 (21/22)← Heater / Fan
-//                 ...                 GND ·  GP19 (28)  ← PIN_GUN_SRV_1
-//                 ...                 GND ·  GP20 (30)  ← PIN_GUN_SRV_2
-//                 ...                 GND ·  GP21 (32)  ← PIN_GUN_SRV_3
-//                 ...                 GND ·  GP22 (34)  ← PIN_NOZZLE_FLASH
-//                 ...                 ...  ·  GP23 (36)
-//                 ...                 GND ·  GP25 (40)  ← NC
+// ---------------------- Pin Configuration ----------------------
+// GunFX Pico Board Pinout:
+//   GPIO 1:  Servo 1
+//   GPIO 2:  Servo 2
+//   GPIO 3:  Servo 3
+//   GPIO 13: Blue LED (status)
+//   GPIO 14: Yellow LED (heater indicator)
+//   GPIO 16: Smoke Fan Motor
+//   GPIO 17: Smoke Heater
+//   GPIO 25: Nozzle Flash
 
-// Gun Servo Outputs (PWM) - Consecutive on right side
-const uint8_t PIN_GUN_SRV_1       = 19; // GP19 (Physical Pin 28)
-const uint8_t PIN_GUN_SRV_2       = 20; // GP20 (Physical Pin 30)
-const uint8_t PIN_GUN_SRV_3       = 21; // GP21 (Physical Pin 32)
+// Gun Servo Outputs (PWM)
+const uint8_t PIN_GUN_SRV_1       = 1;  // GP1 - Servo 1
+const uint8_t PIN_GUN_SRV_2       = 2;  // GP2 - Servo 2
+const uint8_t PIN_GUN_SRV_3       = 3;  // GP3 - Servo 3
 
-// Smoke and Flash Outputs - Continuing on right side
-const uint8_t PIN_NOZZLE_FLASH    = 22; // GP22 (Physical Pin 34) - PWM LED
-const uint8_t PIN_SMOKE_HEATER    = 16; // GP16 (Physical Pin 21) - Digital out
-const uint8_t PIN_SMOKE_FAN       = 17; // GP17 (Physical Pin 22) - Digital out
+// Smoke and Flash Outputs
+const uint8_t PIN_NOZZLE_FLASH    = 25; // GP25 - Nozzle flash LED (PWM)
+const uint8_t PIN_SMOKE_FAN       = 16; // GP16 - Smoke fan motor
+const uint8_t PIN_SMOKE_HEATER    = 17; // GP17 - Smoke heater
+
+// Status LEDs
+const uint8_t PIN_LED_BLUE        = 13; // GP13 - Blue status LED
+const uint8_t PIN_LED_YELLOW      = 14; // GP14 - Yellow heater indicator LED
 
 // ---------------------- Constants ----------------------
 const uint32_t SERIAL_BAUD        = 115200;
@@ -167,6 +167,13 @@ uint32_t next_status_ms = 0;
 const uint32_t WATCHDOG_TIMEOUT_MS = 90000; // 90 seconds
 uint32_t last_keepalive_ms = 0;
 bool watchdog_active = false;
+bool watchdog_triggered = false; // True when watchdog timeout has occurred
+
+// LED state
+bool blue_led_state = false;
+uint32_t blue_led_next_toggle_ms = 0;
+const uint32_t BLUE_LED_WATCHDOG_ON_MS = 1000;    // 1s on when no signal
+const uint32_t BLUE_LED_WATCHDOG_OFF_MS = 2000;   // 2s off when no signal
 
 // RX buffer for binary protocol
 uint8_t rx_buffer[COBS_BUFFER_SIZE];
@@ -277,6 +284,7 @@ void watchdogCheck(uint32_t now_ms) {
   if (now_ms - last_keepalive_ms > WATCHDOG_TIMEOUT_MS) {
     Serial.println("WARN: Watchdog timeout - performing shutdown");
     performSafeShutdown();
+    watchdog_triggered = true; // Set flag for LED indicator
     watchdogDisable();
   }
 }
@@ -291,10 +299,49 @@ void performSafeShutdown() {
 void performSafeInit() {
   stopFiring(0);
   setSmokeHeater(false);
+  watchdog_triggered = false; // Clear watchdog flag on new init
   // Reset servos to center
   for (int i = 0; i < 3; i++) {
     setServoPulse(i + 1, SERVO_DEFAULT_US);
   }
+}
+
+// ---------------------- LED Control ----------------------
+
+void updateYellowLED() {
+  // Yellow LED: solid ON when heater is on
+  digitalWrite(PIN_LED_YELLOW, smoke_heater_on ? HIGH : LOW);
+}
+
+void updateBlueLED(uint32_t now_ms) {
+  // Blue LED behavior:
+  // - OFF when all is OK (idle, no issues)
+  // - Synced with muzzle flash when firing (same blink rate as nozzle)
+  // - Blinking 1s on / 2s off when watchdog triggered (no signal from main board)
+  
+  if (watchdog_triggered) {
+    // No signal pattern: 1s on, 2s off
+    if (now_ms >= blue_led_next_toggle_ms) {
+      blue_led_state = !blue_led_state;
+      if (blue_led_state) {
+        blue_led_next_toggle_ms = now_ms + BLUE_LED_WATCHDOG_ON_MS;
+      } else {
+        blue_led_next_toggle_ms = now_ms + BLUE_LED_WATCHDOG_OFF_MS;
+      }
+    }
+    digitalWrite(PIN_LED_BLUE, blue_led_state ? HIGH : LOW);
+  } else if (is_firing && (flash_active || flash_fading)) {
+    // Sync with muzzle flash - LED on when flash is active or fading
+    digitalWrite(PIN_LED_BLUE, HIGH);
+  } else {
+    // All OK or between shots: LED off
+    digitalWrite(PIN_LED_BLUE, LOW);
+  }
+}
+
+void updateLEDs(uint32_t now_ms) {
+  updateYellowLED();
+  updateBlueLED(now_ms);
 }
 
 // ---------------------- Servo Helper Functions ----------------------
@@ -845,10 +892,14 @@ void setup() {
   pinMode(PIN_NOZZLE_FLASH, OUTPUT);
   pinMode(PIN_SMOKE_FAN, OUTPUT);
   pinMode(PIN_SMOKE_HEATER, OUTPUT);
+  pinMode(PIN_LED_BLUE, OUTPUT);
+  pinMode(PIN_LED_YELLOW, OUTPUT);
   
   analogWrite(PIN_NOZZLE_FLASH, 0);
   digitalWrite(PIN_SMOKE_FAN, LOW);
   digitalWrite(PIN_SMOKE_HEATER, LOW);
+  digitalWrite(PIN_LED_BLUE, LOW);
+  digitalWrite(PIN_LED_YELLOW, LOW);
   
   // Initialize gun servos
   gun_srv_1.attach(PIN_GUN_SRV_1);
@@ -900,6 +951,9 @@ void loop() {
   updateAllServos();
 
   uint32_t now = millis();
+  
+  // Update status LEDs
+  updateLEDs(now);
   
   // Watchdog check - shutdown if no keepalive for 90 seconds
   watchdogCheck(now);

@@ -31,7 +31,7 @@ public static class ControlFactory
     }
 
     /// <summary>
-    /// Creates a ComboBox pre-populated with channel numbers 1-12.
+    /// Creates a ComboBox pre-populated with channel numbers 1-10.
     /// </summary>
     public static ComboBox CreateChannelComboBox(int defaultChannel = 1, int width = 80)
     {
@@ -41,9 +41,9 @@ public static class ControlFactory
             DropDownStyle = ComboBoxStyle.DropDownList,
             FlatStyle = FlatStyle.Popup  // Required for background color to show
         };
-        for (int i = 1; i <= 12; i++)
+        for (int i = 1; i <= 10; i++)
             combo.Items.Add(i.ToString());
-        combo.SelectedIndex = Math.Clamp(defaultChannel - 1, 0, 11);
+        combo.SelectedIndex = Math.Clamp(defaultChannel - 1, 0, 9);
         return combo;
     }
 

@@ -36,7 +36,7 @@ public partial class MainForm
         {
             // Channel 0 means unassigned, select first item (channel 1) as placeholder
             var channel = _config.EngineFx.EngineToggle.InputChannel;
-            _enginePinInput.SelectedIndex = channel > 0 ? Math.Clamp(channel - 1, 0, 11) : 0;
+            _enginePinInput.SelectedIndex = channel > 0 ? Math.Clamp(channel - 1, 0, 9) : 0;
 
             if (_config.EngineFx.EngineToggle.ThresholdUs != 1500)
             {
@@ -134,7 +134,7 @@ public partial class MainForm
         if (_config.GunFx?.Trigger != null)
         {
             var channel = _config.GunFx.Trigger.InputChannel;
-            _triggerChannelInput.SelectedIndex = channel > 0 ? Math.Clamp(channel - 1, 0, 11) : 0;
+            _triggerChannelInput.SelectedIndex = channel > 0 ? Math.Clamp(channel - 1, 0, 9) : 0;
         }
 
         // Smoke - enabled if section exists with valid channel
@@ -142,7 +142,7 @@ public partial class MainForm
         {
             _smokeEnabled.Checked = true;
             var channel = _config.GunFx.Smoke.HeaterToggleChannel;
-            _smokeChannelInput.SelectedIndex = channel > 0 ? Math.Clamp(channel - 1, 0, 11) : 0;
+            _smokeChannelInput.SelectedIndex = channel > 0 ? Math.Clamp(channel - 1, 0, 9) : 0;
             _smokeThresholdInput.Value = _config.GunFx.Smoke.HeaterPwmThresholdUs;
             _smokeFanDelayInput.Value = _config.GunFx.Smoke.FanOffDelayMs;
         }
